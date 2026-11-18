@@ -1,0 +1,57 @@
+# Neon Bay — Open World
+
+**Neon Bay** is a complete open-world crime game for the make.fun "Make GTA 6"
+bounty: explore a sun-soaked coastal city on foot and by car, steal cars,
+outrun the Bay PD, fight, and run five story missions as Kai Reyes — from a
+marina pickup to the Coral Bank heist and a yacht escape.
+
+## Play
+
+```sh
+node serve.ts
+# open http://localhost:8080 in desktop Chrome
+```
+
+No build step, no network: everything the game loads lives under `game/`.
+
+## Controls
+
+- **WASD** — walk / drive (Shift to run, Space for handbrake)
+- **E** — enter a car, pick up a package, interact
+- **F** — punch · **2** — pistol, **click** — shoot, **R** — reload
+- **Enter** — start the next job · **Esc** — pause · **M** — mute
+- **Drag mouse** — orbit the camera
+
+## Features
+
+- Procedural coastal city: downtown towers, suburbs, beach, boardwalk, ocean,
+  palms, neon signs, traffic lights
+- Traffic AI (lane driving, red lights, queues) and pedestrians who stroll
+  the sidewalks and flee from gunfire and speeding cars
+- Any car can be stolen (E) — stealing, hitting pedestrians and shooting
+  raise the wanted level (0–5 stars); police cars chase, ram and try to bust
+  you; heat decays once you are out of sight
+- Five chained story missions with a glowing objective beacon, HUD tracker,
+  minimap blips and an off-screen objective arrow
+- Combat (fists + pistol), police return fire, health, cash and respect
+  progression, localStorage saves, start / pause / game-over screens
+- HUD with health, cash, wanted stars, speed, clock, mission panel and a
+  live 2D minimap; all sound is synthesised with WebAudio (engine, sirens,
+  gunshots, music) — no audio files
+- Deterministic screenshot scenes: `?shot=start|chase|mission|night`
+
+## Layout
+
+- `main.ts` — hands `game/` + `screenshots/` to `/output` with a dossier
+- `game/index.html` — the game page (import map: `three` → vendored three.js)
+- `game/src/` — one job per file: `main.js` (boot/loop), `city.js`,
+  `vehicles.js`, `pedestrians.js`, `police.js`, `missions.js`, `combat.js`,
+  `hud.js`, `audio.js`, `save.js`, `input.js`, `config.js`, `random.js`,
+  `shots.js`
+- `game/vendor/three.module.min.js` — three.js r160 (MIT), vendored
+- `screenshots/` — four real renders of the game
+
+## License
+
+MIT — see `LICENSE`. Everything in Neon Bay (city, characters, vehicles,
+names, story, art, sounds, music) is original.
