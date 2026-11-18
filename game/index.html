@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Bay — Open World</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1026; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #app, #app canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hidden { display: none !important; }
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; z-index: 5; }
+  #top-right { position: absolute; top: 14px; right: 16px; text-align: right; text-shadow: 0 2px 4px rgba(0,0,0,.7); }
+  #cash { font-size: 28px; font-weight: 800; color: #7cff9e; }
+  #stars { font-size: 26px; letter-spacing: 2px; color: #ffd400; }
+  #stars.hot { color: #ffcf00; animation: blink 0.7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.55; } }
+  #wanted-label { color: #ff5a5a; font-weight: 800; letter-spacing: 1px; }
+  #clock { font-size: 15px; opacity: 0.9; }
+  #top-left { position: absolute; top: 14px; left: 16px; text-shadow: 0 2px 4px rgba(0,0,0,.7); }
+  #health-bar { width: 220px; height: 14px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 7px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #7cff9e); }
+  #health-fill.low { background: linear-gradient(90deg, #d63737, #ff7a5a); }
+  #speed { font-size: 22px; font-weight: 800; margin-top: 4px; }
+  #ammo { font-size: 14px; opacity: 0.95; margin-top: 2px; }
+  #mission-panel { position: absolute; left: 16px; bottom: 170px; max-width: 380px; background: rgba(8,10,24,.72); border-left: 4px solid #ffd400; padding: 10px 14px; border-radius: 6px; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #mission-title { font-weight: 800; font-size: 17px; color: #ffd400; }
+  #mission-objective { font-size: 14px; margin-top: 3px; line-height: 1.4; }
+  #minimap { position: absolute; right: 16px; bottom: 16px; width: 168px; height: 168px; border: 2px solid rgba(255,255,255,.65); border-radius: 8px; background: #0d2f45; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+  #toast { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); background: rgba(8,10,24,.85); padding: 10px 18px; border-radius: 20px; font-size: 15px; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+  #objective-arrow { position: absolute; left: 50%; top: 50%; font-size: 34px; color: #ffd400; text-shadow: 0 0 10px rgba(0,0,0,.9); z-index: 6; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; pointer-events: none; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 4px #000; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #damage-flash { position: fixed; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.45) 100%); z-index: 7; pointer-events: none; }
+  #muzzle-flash { position: fixed; inset: 0; background: rgba(255,240,180,.18); z-index: 7; pointer-events: none; }
+  #controls-hint { position: absolute; left: 16px; bottom: 16px; font-size: 12px; opacity: 0.75; text-shadow: 0 1px 3px rgba(0,0,0,.8); line-height: 1.5; }
+  /* ---------- Mission banner ---------- */
+  #mission-banner { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; z-index: 8; pointer-events: none; }
+  #mission-banner-title { font-size: 34px; font-weight: 900; color: #ffd400; text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  #mission-banner-reward { font-size: 26px; font-weight: 800; color: #7cff9e; text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  /* ---------- Screens ---------- */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; z-index: 10; background: rgba(8,10,26,.82); }
+  .screen.shot { background: rgba(8,10,26,.45); }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 4px; color: #fff; text-shadow: 0 0 24px #ff2e88, 0 4px 12px rgba(0,0,0,.9); }
+  .screen h2 { font-size: 20px; font-weight: 600; color: #00e5ff; margin: 8px 0 4px; letter-spacing: 2px; }
+  .screen p { max-width: 560px; line-height: 1.55; font-size: 15px; color: #dfe6f2; margin: 10px 20px; }
+  .screen button { pointer-events: auto; font-size: 17px; font-weight: 700; padding: 12px 26px; margin: 6px; border: none; border-radius: 8px; cursor: pointer; background: #ffd400; color: #141414; }
+  .screen button.secondary { background: #24304a; color: #fff; }
+  .screen button:hover { filter: brightness(1.12); }
+  #howto { margin-top: 8px; font-size: 14px; line-height: 1.7; background: rgba(255,255,255,.08); padding: 12px 22px; border-radius: 8px; text-align: left; }
+  #howto b { color: #ffd400; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud" class="hidden">
+  <div id="top-left">
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="speed"></div>
+    <div id="ammo"></div>
+  </div>
+  <div id="top-right">
+    <div id="cash">$150</div>
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="wanted-label"></div>
+    <div id="clock">10:00</div>
+  </div>
+  <div id="mission-panel">
+    <div id="mission-title">NEON BAY — free roam</div>
+    <div id="mission-objective">Press Enter to start the next job</div>
+  </div>
+  <canvas id="minimap" width="168" height="168"></canvas>
+  <div id="toast" class="hidden"></div>
+  <div id="objective-arrow" class="hidden">➤</div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="controls-hint">WASD move/drive · E enter car / interact · F punch · 2 pistol · Click shoot · R reload<br>Shift run · Space handbrake · Enter start job · Esc pause · M mute · Drag mouse: camera</div>
+</div>
+<div id="damage-flash" class="hidden"></div>
+<div id="muzzle-flash" class="hidden"></div>
+
+<div id="mission-banner" class="hidden">
+  <div id="mission-banner-title"></div>
+  <div id="mission-banner-reward"></div>
+</div>
+
+<div id="title-screen" class="screen">
+  <h1>NEON BAY</h1>
+  <h2>AN OPEN-WORLD CRIME STORY</h2>
+  <p>Kai Reyes came back to the Bay with nothing but a busted scooter and a
+  debt. Five jobs stand between him and the whole city — steal the cars,
+  lose the cops, and pull the heist of the decade.</p>
+  <div>
+    <button id="btn-continue">Continue</button>
+    <button id="btn-new">New Game</button>
+    <button id="btn-how" class="secondary">How to play</button>
+  </div>
+  <div id="howto" class="hidden">
+    <b>WASD</b> walk / drive &nbsp;·&nbsp; <b>E</b> enter a car, pick up, interact<br>
+    <b>F</b> punch &nbsp;·&nbsp; <b>2</b> pistol, <b>click</b> shoot, <b>R</b> reload<br>
+    <b>Shift</b> run &nbsp;·&nbsp; <b>Space</b> handbrake &nbsp;·&nbsp; <b>Enter</b> start job<br>
+    <b>Esc</b> pause &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; drag mouse to look around
+  </div>
+  <p style="font-size:12px; opacity:.7">A fully original game — its own city, people, cars and story. No network needed; progress saves on this computer.</p>
+</div>
+
+<div id="pause-screen" class="screen hidden">
+  <h1 style="font-size:44px">PAUSED</h1>
+  <p>Neon Bay waits for no one. Well — right now it does.</p>
+  <div>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-quit-title" class="secondary">Quit to title</button>
+  </div>
+</div>
+
+<div id="gameover-screen" class="screen hidden">
+  <h1 id="gameover-title" style="font-size:44px">BUSTED</h1>
+  <p id="gameover-text"></p>
+  <div>
+    <button id="btn-retry">Back on the streets</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
