@@ -1,95 +1,128 @@
-// Neon Bay — keyboard and mouse input.
-// Tracks held keys, edge-triggered presses (E, F, R, M, Esc, Enter) and a
-// drag-to-orbit camera. The game reads this, never DOM events directly.
+// input.js — keyboard, mouse and touch input for Neon Bay.
+// One Input object owns the whole state: which keys are held, the camera drag,
+// and the touch buttons. The game reads it once a frame; nothing else touches
+// the DOM listeners.
 
-export function createInput(canvas) {
-  const keys = new Set();
-  const pressed = new Set();
-  let mouseDX = 0;
-  let mouseDY = 0;
-  let dragging = false;
-  let lastX = 0;
-  let lastY = 0;
-  let mouseDown = false;
-
-  function keyName(event) {
-    return event.code;
+export class Input {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.keys = new Set();
+    this.pressed = new Set();
+    this.mouseDown = false;
+    this.mouseClicked = false;
+    this.dragX = 0;
+    this.dragY = 0;
+    this.touch = { steer: 0, gas: false, brake: false, action: false };
+    this._lastX = 0;
+    this._lastY = 0;
+    this._bind();
   }
 
-  window.addEventListener('keydown', (event) => {
-    if (event.repeat) return;
-    keys.add(keyName(event));
-    pressed.add(keyName(event));
-    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
-      event.preventDefault();
-    }
-  });
-  window.addEventListener('keyup', (event) => {
-    keys.delete(keyName(event));
-  });
-  window.addEventListener('blur', () => {
-    keys.clear();
-  });
+  _bind() {
+    window.addEventListener('keydown', (ev) => {
+      if (ev.repeat) return;
+      this.keys.add(ev.code);
+      this.pressed.add(ev.code);
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(ev.code)) {
+        ev.preventDefault();
+      }
+    });
+    window.addEventListener('keyup', (ev) => {
+      this.keys.delete(ev.code);
+    });
+    window.addEventListener('blur', () => {
+      this.keys.clear();
+    });
+    this.canvas.addEventListener('mousedown', (ev) => {
+      this.mouseDown = true;
+      this.mouseClicked = true;
+      this._lastX = ev.clientX;
+      this._lastY = ev.clientY;
+    });
+    window.addEventListener('mouseup', () => {
+      this.mouseDown = false;
+    });
+    window.addEventListener('mousemove', (ev) => {
+      if (!this.mouseDown) return;
+      this.dragX += ev.clientX - this._lastX;
+      this.dragY += ev.clientY - this._lastY;
+      this._lastX = ev.clientX;
+      this._lastY = ev.clientY;
+    });
+    // Touch: left half steers, right half is gas/brake/action.
+    this.canvas.addEventListener('touchstart', (ev) => {
+      ev.preventDefault();
+      this._touchMove(ev);
+    }, { passive: false });
+    this.canvas.addEventListener('touchmove', (ev) => {
+      ev.preventDefault();
+      this._touchMove(ev);
+    }, { passive: false });
+    this.canvas.addEventListener('touchend', () => {
+      this.touch.steer = 0;
+      this.touch.gas = false;
+      this.touch.brake = false;
+      this.touch.action = false;
+    });
+  }
 
-  canvas.addEventListener('pointerdown', (event) => {
-    dragging = true;
-    mouseDown = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    canvas.setPointerCapture(event.pointerId);
-  });
-  canvas.addEventListener('pointermove', (event) => {
-    if (!dragging) return;
-    mouseDX += event.clientX - lastX;
-    mouseDY += event.clientY - lastY;
-    lastX = event.clientX;
-    lastY = event.clientY;
-  });
-  function endDrag(event) {
-    dragging = false;
-    mouseDown = false;
-    if (event.pointerId !== undefined && canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
+  _touchMove(ev) {
+    const rect = this.canvas.getBoundingClientRect();
+    for (const t of ev.touches) {
+      const x = (t.clientX - rect.left) / rect.width;
+      const y = (t.clientY - rect.top) / rect.height;
+      if (x < 0.5) {
+        this.touch.steer = x < 0.25 ? -1 : 1;
+      } else if (y < 0.5) {
+        this.touch.gas = true;
+      } else if (x < 0.75) {
+        this.touch.brake = true;
+      } else {
+        this.touch.action = true;
+      }
     }
   }
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', endDrag);
-  canvas.addEventListener('wheel', (event) => {
-    event.preventDefault();
-  }, { passive: false });
 
-  return {
-    keys,
-    // True only on the frame the key went down.
-    wasPressed(code) {
-      return pressed.has(code);
-    },
-    isDown(code) {
-      return keys.has(code);
-    },
-    get mouseDown() {
-      return mouseDown;
-    },
-    // Mouse movement since last frame, in pixels.
-    consumeMouse() {
-      const dx = mouseDX;
-      const dy = mouseDY;
-      mouseDX = 0;
-      mouseDY = 0;
-      return { dx, dy };
-    },
-    // Any of the movement keys.
-    moveVector() {
-      let x = 0;
-      let y = 0;
-      if (keys.has('KeyW') || keys.has('ArrowUp')) y += 1;
-      if (keys.has('KeyS') || keys.has('ArrowDown')) y -= 1;
-      if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
-      if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
-      return { x, y };
-    },
-    endFrame() {
-      pressed.clear();
-    },
-  };
+  // True while the key is held.
+  held(code) {
+    return this.keys.has(code) || this._touchKey(code);
+  }
+
+  // True only on the frame the key went down.
+  wasPressed(code) {
+    return this.pressed.has(code) || (code === 'KeyE' && this.touch.action);
+  }
+
+  _touchKey(code) {
+    if (code === 'KeyW' || code === 'ArrowUp') return this.touch.gas;
+    if (code === 'KeyS' || code === 'ArrowDown') return this.touch.brake;
+    if (code === 'KeyA' || code === 'ArrowLeft') return this.touch.steer < 0;
+    if (code === 'KeyD' || code === 'ArrowRight') return this.touch.steer > 0;
+    return false;
+  }
+
+  // Steering: -1 (left) to +1 (right), from keys or touch.
+  steerAxis() {
+    let s = 0;
+    if (this.held('KeyA') || this.held('ArrowLeft')) s -= 1;
+    if (this.held('KeyD') || this.held('ArrowRight')) s += 1;
+    return s;
+  }
+
+  // Throttle: +1 forward, -1 reverse/brake.
+  throttleAxis() {
+    let t = 0;
+    if (this.held('KeyW') || this.held('ArrowUp')) t += 1;
+    if (this.held('KeyS') || this.held('ArrowDown')) t -= 1;
+    return t;
+  }
+
+  // Call at the end of every frame: clears one-frame edges.
+  endFrame() {
+    this.pressed.clear();
+    this.mouseClicked = false;
+    this.dragX = 0;
+    this.dragY = 0;
+    this.touch.action = false;
+  }
 }

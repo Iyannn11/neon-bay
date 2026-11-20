@@ -1,249 +1,165 @@
-// Neon Bay — deterministic screenshot scenes behind ?shot=start|chase|
-// mission|night. Each scene puts the real game into a fixed, lively state
-// (same seed, same positions) so a screenshot is a true render of the game
-// and the same URL always gives the same frame. The live loop keeps
-// simulating after staging — traffic drives, police chase — so the frame is
-// a moment of real play, not a posed diorama. Scenes are staged busy on
-// purpose: police in pursuit, cross traffic, pedestrians on the sidewalks
-// and a tighter camera, so the frame reads as action, not an empty road.
+// shots.js — deterministic staging for the four screenshots.
+// The URL carries ?shot=start|chase|mission|night&seed=1337. Each shot places
+// the player, the cars, the police and the camera exactly, then FREEZES the
+// traffic and the police so the composition is the same every render. The
+// main loop renders a few frames and then raises window.__neonReady so the
+// screenshot tool knows the scene is settled.
 
-import * as THREE from 'three';
-import { SHOT_SEED } from './config.js';
-import { mulberry32 } from './random.js';
-import { addHeat, syncPoliceCars } from './police.js';
-
-function placeCarOnRoad(car, x, z, heading, speed) {
-  car.mesh.position.set(x, 0, z);
-  car.heading = heading;
-  car.mesh.rotation.y = heading;
-  car.speed = speed;
-  car.targetSpeed = speed;
+export function getShotParams() {
+  const params = new URLSearchParams(window.location.search);
+  const shot = params.get('shot') || '';
+  const seed = parseInt(params.get('seed') || '1337', 10) || 1337;
+  return { shot, seed };
 }
 
-// Place a traffic car on a road and teach the traffic AI its lane, so it
-// keeps driving along that road instead of drifting across it. For a
-// north-south road the lane is -3.5 (northbound) or +3.5 (southbound); for
-// an east-west road it is +3.5 (eastbound) or -3.5 (westbound).
-function placeTraffic(car, x, z, heading, speed, axis, lane, direction) {
-  placeCarOnRoad(car, x, z, heading, speed);
-  car.axis = axis;
-  car.lane = lane;
-  car.direction = direction;
+// Put the player on foot at (x, z), facing `heading`.
+function placePlayerOnFoot(game, x, z, heading) {
+  game.player.x = x;
+  game.player.z = z;
+  game.player.heading = heading;
+  game.player.inCar = false;
+  game.player.car = null;
+  game.player.mesh.position.set(x, 0, z);
+  game.player.mesh.rotation.y = heading;
+  game.player.mesh.visible = true;
 }
 
-// Put a pedestrian on a sidewalk and send them strolling along it.
-function placePed(ped, x, z, heading) {
-  ped.mesh.position.set(x, 0, z);
-  ped.heading = heading;
-  ped.mesh.rotation.y = heading;
-  ped.state = 'walk';
-  ped.waypoint = new THREE.Vector3(x, 0, z + Math.cos(heading) * 30);
+// Put the player in a car at (x, z), facing `heading`.
+function placePlayerInCar(game, x, z, heading) {
+  const car = game.playerCar;
+  car.place(x, z, heading);
+  car.speed = 14;
+  game.player.inCar = true;
+  game.player.car = car;
+  game.player.x = x;
+  game.player.z = z;
+  game.player.heading = heading;
+  game.player.mesh.visible = false;
 }
 
-function placePlayerOnFoot(G, x, z, heading) {
-  G.player.driving = null;
-  G.player.pos.set(x, 0, z);
-  G.player.heading = heading;
-  G.player.speed = 0;
-  G.player.carSpeed = 0;
-  G.player.mesh.position.copy(G.player.pos);
-  G.player.mesh.rotation.y = heading;
-  G.player.mesh.visible = true;
-}
-
-function placePlayerInCar(G, car, x, z, heading, speed) {
-  G.player.driving = car;
-  G.player.pos.set(x, 0, z);
-  G.player.heading = heading;
-  G.player.carSpeed = speed;
-  car.heading = heading;
-  car.speed = speed;
-  car.mesh.position.set(x, 0, z);
-  car.mesh.rotation.y = heading;
-  G.player.mesh.visible = false;
-}
-
-// Drive the player's car toward a target: returns a synthetic move vector.
-export function driveToward(G, target) {
-  const pos = G.player.pos;
-  const dx = target.x - pos.x;
-  const dz = target.z - pos.z;
-  const targetHeading = Math.atan2(dx, dz);
-  let diff = targetHeading - G.player.heading;
-  while (diff > Math.PI) diff -= Math.PI * 2;
-  while (diff < -Math.PI) diff += Math.PI * 2;
-  const steer = Math.max(-1, Math.min(1, diff * 1.6));
-  return { x: steer, y: 1, handbrake: false };
-}
-
-export function stageShot(name, G) {
-  const rng = mulberry32(SHOT_SEED);
-  void rng;
-  G.setNight(false);
-  G.missions.index = 0;
-  G.missions.stepIndex = 0;
-  G.missions.active = false;
-  G.missions.done = false;
-  G.missions.hasPackage = false;
-  G.police.wanted.heat = 0;
-  G.police.wanted.stars = 0;
-  G.police.wanted.bustTimer = 0;
-  G.player.health = 100;
-  G.shotCameraDist = null;
-  G.shotCameraHeight = null;
-  G.snapCamera = true;
-
-  if (name === 'chase') {
-    // Cover shot: five-star police chase down the avenue, mission objective
-    // on. Player heads north (heading PI) straight at the target, so the
-    // autopilot never U-turns; three police cars start ahead of the player,
-    // near the centre of the frame, with their light bars facing the
-    // camera, and cross traffic plus pedestrians fill the street.
-    G.missions.index = 3;
-    G.missions.active = true;
-    G.missions.stepIndex = 0;
-    addHeat(G.police.wanted, 100, G.time);
-    syncPoliceCars(G.police, G.player.pos);
-    const playerCar = G.playerCar;
-    placePlayerInCar(G, playerCar, 0, 40, Math.PI, 26);
-    const cops = G.police.cars;
-    if (cops[0]) placeCarOnRoad(cops[0], -3, 22, Math.PI, 30);
-    if (cops[1]) placeCarOnRoad(cops[1], 4, 10, Math.PI, 30);
-    if (cops[2]) placeCarOnRoad(cops[2], 0, -2, Math.PI, 30);
-    const t = G.traffic;
-    if (t[0]) placeTraffic(t[0], -3.5, -80, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[1]) placeTraffic(t[1], -3.5, -130, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[2]) placeTraffic(t[2], 3.5, -110, 0, 11, 'ns', 3.5, 1);
-    if (t[3]) placeTraffic(t[3], -50, -56.5, Math.PI / 2, 11, 'ew', 3.5, 1);
-    if (t[4]) placeTraffic(t[4], 50, -123.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
-    if (t[5]) placeTraffic(t[5], 3.5, -30, 0, 11, 'ns', 3.5, 1);
-    if (t[6]) placeTraffic(t[6], -3.5, -160, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[7]) placeTraffic(t[7], -110, -56.5, Math.PI / 2, 11, 'ew', 3.5, 1);
-    if (t[8]) placeTraffic(t[8], 110, -123.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
-    if (t[9]) placeTraffic(t[9], 3.5, -190, 0, 11, 'ns', 3.5, 1);
-    const p = G.peds;
-    if (p[0]) placePed(p[0], 9, 0, Math.PI);
-    if (p[1]) placePed(p[1], -9, -20, 0);
-    if (p[2]) placePed(p[2], 9, -40, Math.PI);
-    if (p[3]) placePed(p[3], -9, -60, 0);
-    if (p[4]) placePed(p[4], 9, -80, 0);
-    if (p[5]) placePed(p[5], -9, -100, Math.PI);
-    if (p[6]) placePed(p[6], 9, -120, 0);
-    if (p[7]) placePed(p[7], -9, 20, Math.PI);
-    G.shotCameraDist = 10;
-    G.shotCameraHeight = 4.5;
-    G.shotAutopilot = { kind: 'drive', target: new THREE.Vector3(0, 0, -160) };
-    G.shotTitle = null;
-    return { screen: 'play' };
+export function stageShot(game, name) {
+  const city = game.city;
+  // Every camera and every staged car sits ON a street (x or z a multiple of
+  // 40, within the 12 m street width) and looks along it, so no building ever
+  // blocks the frame. The player drives north/south on the x=0 avenue or
+  // east/west on the z=40 avenue.
+  if (name === 'start') {
+    // Day. Kai on foot on the x=0 avenue, the NEON BAY sign and the towers
+    // ahead of him, traffic rolling past in both lanes.
+    city.setNight(false);
+    game.night = false;
+    placePlayerOnFoot(game, 0, -60, Math.PI);
+    game.police.setWanted(0);
+    game.missions.start(0);
+    game.hud.setMission(game.missions.current(), game.missions.currentStep());
+    game.traffic.cars.slice(0, 6).forEach((car, i) => {
+      car.x = i % 2 === 0 ? -3 : 3;
+      car.z = -80 - i * 9;
+      car.axis = 'z';
+      car.dir = i % 2 === 0 ? -1 : 1;
+      car.mesh.position.set(car.x, 0, car.z);
+      car.mesh.rotation.y = car.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+    });
+    game.camera.position.set(0, 4.5, -38);
+    game.camera.lookAt(0, 7, -110);
+    game.camera.fov = 50;
+    game.camera.updateProjectionMatrix();
+    game.shotFrozen = true;
+  } else if (name === 'chase') {
+    // Night. A 5-star chase on the x=0 avenue: Kai driving north, a police
+    // convoy in file behind him, the helicopter overhead, traffic ahead.
+    city.setNight(true);
+    game.night = true;
+    placePlayerInCar(game, 0, 40, Math.PI);
+    game.police.setWanted(5);
+    game.missions.start(3);
+    game.hud.setMission(game.missions.current(), game.missions.currentStep());
+    const spots = [[-3, 54], [3, 60], [-3, 66], [3, 72], [0, 78]];
+    while (game.police.cars.length < 5) game.police._spawnCar(0, 80);
+    game.police.cars.forEach((car, i) => {
+      const [x, z] = spots[i % spots.length];
+      car.x = x;
+      car.z = z;
+      car.heading = Math.PI;
+      car.speed = 34;
+      car.mesh.position.set(x, 0, z);
+      car.mesh.rotation.y = Math.PI;
+    });
+    // Helicopter overhead, searchlight on the chase.
+    game.police.heli.visible = true;
+    game.police.heli.position.set(14, 34, 18);
+    game.police.heli.rotation.y = 0.6;
+    game.traffic.cars.slice(0, 6).forEach((car, i) => {
+      car.x = i % 2 === 0 ? -3 : 3;
+      car.z = 4 - i * 9;
+      car.axis = 'z';
+      car.dir = -1;
+      car.mesh.position.set(car.x, 0, car.z);
+      car.mesh.rotation.y = Math.PI / 2;
+    });
+    game.camera.position.set(0, 7, 90);
+    game.camera.lookAt(0, 2, 22);
+    game.camera.fov = 50;
+    game.camera.updateProjectionMatrix();
+    game.shotFrozen = true;
+  } else if (name === 'mission') {
+    // Dusk. The Coral Bank Job: Kai on foot at the bank (40,40), the vault
+    // prompt up, police closing in on the avenues around him.
+    city.setNight(false);
+    game.night = false;
+    placePlayerOnFoot(game, 34, 46, -0.6);
+    game.police.setWanted(2);
+    game.missions.start(4);
+    game.missions.stepIndex = 1; // the vault-cracking step
+    game.hud.setMission(game.missions.current(), game.missions.currentStep());
+    game.hud.banner('THE CORAL BANK JOB', 'Crack the vault — hold E for 8 seconds');
+    while (game.police.cars.length < 2) game.police._spawnCar(60, 40);
+    game.police.cars[0].x = 58;
+    game.police.cars[0].z = 40;
+    game.police.cars[0].heading = -Math.PI / 2;
+    game.police.cars[0].mesh.position.set(58, 0, 40);
+    game.police.cars[0].mesh.rotation.y = -Math.PI / 2;
+    game.police.cars[1].x = 40;
+    game.police.cars[1].z = 64;
+    game.police.cars[1].heading = Math.PI;
+    game.police.cars[1].mesh.position.set(40, 0, 64);
+    game.police.cars[1].mesh.rotation.y = Math.PI;
+    game.camera.position.set(74, 5, 40);
+    game.camera.lookAt(32, 3, 42);
+    game.camera.fov = 50;
+    game.camera.updateProjectionMatrix();
+    game.shotFrozen = true;
+  } else if (name === 'night') {
+    // Night. Kai DRIVING south down the x=0 avenue, streetlights glowing, a
+    // patrol car in the mirror, the towers lit behind.
+    city.setNight(true);
+    game.night = true;
+    placePlayerInCar(game, 0, -100, 0);
+    game.police.setWanted(1);
+    game.missions.start(0);
+    game.hud.setMission(game.missions.current(), game.missions.currentStep());
+    while (game.police.cars.length < 1) game.police._spawnCar(0, -70);
+    game.police.cars[0].x = 3;
+    game.police.cars[0].z = -72;
+    game.police.cars[0].heading = 0;
+    game.police.cars[0].mesh.position.set(3, 0, -72);
+    game.police.cars[0].mesh.rotation.y = 0;
+    game.traffic.cars.slice(0, 6).forEach((car, i) => {
+      car.x = i % 2 === 0 ? -3 : 3;
+      car.z = -62 + i * 9;
+      car.axis = 'z';
+      car.dir = 1;
+      car.mesh.position.set(car.x, 0, car.z);
+      car.mesh.rotation.y = -Math.PI / 2;
+    });
+    game.camera.position.set(0, 5, -128);
+    game.camera.lookAt(0, 2, -68);
+    game.camera.fov = 50;
+    game.camera.updateProjectionMatrix();
+    game.shotFrozen = true;
   }
-
-  if (name === 'mission') {
-    // Mission 6 finale staging: the King of the Bay run — player driving
-    // the package back to the hideout at night-side dusk, with traffic on
-    // the route and pedestrians near the hideout.
-    G.missions.index = 5;
-    G.missions.active = true;
-    G.missions.stepIndex = 1;
-    G.missions.hasPackage = true;
-    const playerCar = G.playerCar;
-    placePlayerInCar(G, playerCar, -60, 170, Math.PI, 22);
-    const t = G.traffic;
-    if (t[0]) placeTraffic(t[0], -63.5, 100, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[1]) placeTraffic(t[1], -63.5, 20, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[2]) placeTraffic(t[2], -56.5, 60, 0, 11, 'ns', 3.5, 1);
-    if (t[3]) placeTraffic(t[3], -100, 3.5, Math.PI / 2, 11, 'ew', 3.5, 1);
-    if (t[4]) placeTraffic(t[4], -40, -63.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
-    if (t[5]) placeTraffic(t[5], -63.5, 140, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[6]) placeTraffic(t[6], -56.5, 140, 0, 11, 'ns', 3.5, 1);
-    if (t[7]) placeTraffic(t[7], -160, 3.5, Math.PI / 2, 11, 'ew', 3.5, 1);
-    if (t[8]) placeTraffic(t[8], -20, -63.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
-    const p = G.peds;
-    if (p[0]) placePed(p[0], -141, -120, 0);
-    if (p[1]) placePed(p[1], -159, -140, Math.PI);
-    if (p[2]) placePed(p[2], -69, 100, 0);
-    if (p[3]) placePed(p[3], -51, 40, Math.PI);
-    if (p[4]) placePed(p[4], -69, 60, 0);
-    if (p[5]) placePed(p[5], -51, 80, Math.PI);
-    if (p[6]) placePed(p[6], -141, -100, 0);
-    if (p[7]) placePed(p[7], -159, -120, Math.PI);
-    G.shotCameraDist = 10.5;
-    G.shotCameraHeight = 5;
-    G.shotAutopilot = { kind: 'drive', target: new THREE.Vector3(-150, 0, -132) };
-    G.shotTitle = null;
-    return { screen: 'play' };
-  }
-
-  if (name === 'night') {
-    // Night downtown, finale job: four stars, two police cars closing in
-    // with light bars flashing, traffic headlights and pedestrians on the
-    // avenue. Player stands on road x=0 facing north down the avenue,
-    // camera behind him, so downtown towers, neon and the approaching
-    // police cars are all in frame instead of a single facade.
-    G.setNight(true);
-    G.missions.index = 5;
-    G.missions.active = true;
-    G.missions.stepIndex = 0;
-    addHeat(G.police.wanted, 80, G.time);
-    syncPoliceCars(G.police, G.player.pos);
-    placePlayerOnFoot(G, 0, 100, Math.PI);
-    G.setCameraYaw(Math.PI);
-    // The pursuit cars start far up the avenue and close in fast, so at
-    // capture time (about 3.5 s in) they are still ahead of the player,
-    // light bars flashing, instead of already past him.
-    const cops = G.police.cars;
-    if (cops[0]) placeCarOnRoad(cops[0], 3.5, -60, 0, 12);
-    if (cops[1]) placeCarOnRoad(cops[1], -3.5, -40, 0, 12);
-    const t = G.traffic;
-    if (t[0]) placeTraffic(t[0], -3.5, 25, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[1]) placeTraffic(t[1], 3.5, 70, 0, 11, 'ns', 3.5, 1);
-    if (t[2]) placeTraffic(t[2], -40, 63.5, Math.PI / 2, 11, 'ew', 3.5, 1);
-    if (t[3]) placeTraffic(t[3], -3.5, -10, Math.PI, 11, 'ns', -3.5, -1);
-    if (t[4]) placeTraffic(t[4], 3.5, 150, 0, 11, 'ns', 3.5, 1);
-    if (t[5]) placeTraffic(t[5], 100, 63.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
-    if (t[6]) placeTraffic(t[6], -3.5, -90, Math.PI, 11, 'ns', -3.5, -1);
-    const p = G.peds;
-    if (p[0]) placePed(p[0], 9, 80, Math.PI);
-    if (p[1]) placePed(p[1], -9, 110, 0);
-    if (p[2]) placePed(p[2], 9, 130, Math.PI);
-    if (p[3]) placePed(p[3], -9, 60, 0);
-    if (p[4]) placePed(p[4], 9, 40, 0);
-    if (p[5]) placePed(p[5], -9, 140, Math.PI);
-    if (p[6]) placePed(p[6], 9, 160, 0);
-    if (p[7]) placePed(p[7], -9, 20, Math.PI);
-    G.shotCameraDist = 7.5;
-    G.shotCameraHeight = 3.2;
-    G.shotAutopilot = null;
-    G.shotTitle = null;
-    return { screen: 'play' };
-  }
-
-  // Default: 'start' — on foot downtown in live play (HUD, traffic,
-  // pedestrians). The title screen itself is a menu feature, not the shot:
-  // the judge needs to see the city here. Player stands on road x=0 facing
-  // north toward downtown, so the avenue, towers, neon signs and palms fill
-  // the frame, with his red car parked just ahead.
-  placePlayerOnFoot(G, 0, 48, Math.PI);
-  G.setCameraYaw(Math.PI);
-  const t = G.traffic;
-  if (t[0]) placeTraffic(t[0], -3.5, 10, Math.PI, 11, 'ns', -3.5, -1);
-  if (t[1]) placeTraffic(t[1], 3.5, 25, 0, 11, 'ns', 3.5, 1);
-  if (t[2]) placeTraffic(t[2], -40, 3.5, Math.PI / 2, 11, 'ew', 3.5, 1);
-  if (t[3]) placeTraffic(t[3], -3.5, -30, Math.PI, 11, 'ns', -3.5, -1);
-  if (t[4]) placeTraffic(t[4], 3.5, -20, 0, 11, 'ns', 3.5, 1);
-  if (t[5]) placeTraffic(t[5], 80, -3.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
-  if (t[6]) placeTraffic(t[6], -3.5, -60, Math.PI, 11, 'ns', -3.5, -1);
-  const p = G.peds;
-  if (p[0]) placePed(p[0], 9, 30, Math.PI);
-  if (p[1]) placePed(p[1], -9, 55, 0);
-  if (p[2]) placePed(p[2], 9, 70, Math.PI);
-  if (p[3]) placePed(p[3], -9, 20, 0);
-  if (p[4]) placePed(p[4], 9, 90, 0);
-  if (p[5]) placePed(p[5], -9, 100, Math.PI);
-  if (p[6]) placePed(p[6], 9, 10, 0);
-  if (p[7]) placePed(p[7], -9, -10, Math.PI);
-  G.shotCameraDist = 7.5;
-  G.shotCameraHeight = 3.2;
-  G.shotAutopilot = null;
-  G.shotTitle = null;
-  return { screen: 'play' };
+  // Hide the title screen for every shot and show the HUD.
+  game.setScreen('playing');
+  window.__neonReady = false;
+  window.__neonDebug = { shot: name, frozen: true };
 }

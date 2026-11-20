@@ -1,6 +1,7 @@
-// Neon Bay — small deterministic random helpers.
-// A mulberry32 generator keeps the city and the screenshot scenes identical
-// for a given seed, so ?shot= renders are reproducible.
+// random.js — deterministic seeded random numbers for Neon Bay.
+// Every scene, street layout and traffic pattern derives from one seed, so a
+// given seed always builds the same city. The generator is mulberry32, a small
+// fast PRNG with good distribution for a game of this size.
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -13,19 +14,32 @@ export function mulberry32(seed) {
   };
 }
 
-export function pick(rng, list) {
-  return list[Math.floor(rng() * list.length)];
-}
-
-export function range(rng, min, max) {
-  return min + rng() * (max - min);
-}
-
-export function rangeInt(rng, min, max) {
-  return min + Math.floor(rng() * (max - min + 1));
-}
-
-// Deterministic pick of a road-centre coordinate.
-export function roadCoord(rng, roads) {
-  return roads[Math.floor(rng() * roads.length)];
+// A tiny helper object that wraps a mulberry32 stream with the calls the game
+// actually needs: ranges, integers, picks and coin flips.
+export function makeRng(seed) {
+  const next = mulberry32(seed);
+  return {
+    next,
+    range(min, max) {
+      return min + next() * (max - min);
+    },
+    int(min, max) {
+      return Math.floor(min + next() * (max - min + 1));
+    },
+    pick(list) {
+      return list[Math.floor(next() * list.length)];
+    },
+    chance(p) {
+      return next() < p;
+    },
+    // A stable hash of a string, so a named place always gets the same seed.
+    hashString(str) {
+      let h = 2166136261;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    },
+  };
 }

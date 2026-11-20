@@ -1,109 +1,168 @@
-// Neon Bay — shared tuning constants and world layout.
-// One source of truth for sizes, speeds, colours and mission rewards, so
-// the city, cars, police, missions and HUD all agree with each other.
+// config.js — every constant Neon Bay tunes by, in one place.
+// The world is a square city on a street grid. Streets run along X and Z at a
+// fixed spacing; blocks sit between them. All distances are in metres.
 
 export const WORLD = {
-  // City blocks live inside [-210, 210] on x and z. The beach and ocean
-  // sit on the south edge (z > 210).
-  halfSize: 210,
-  block: 60,
-  roadWidth: 14,
-  // Road centre lines, one every 60 units.
-  roads: [-180, -120, -60, 0, 60, 120, 180],
-  groundSize: 620,
-  beachStart: 212,
-  oceanStart: 262,
+  // City footprint: streets at -160, -120, -80, -40, 0, 40, 80, 120, 160.
+  halfSize: 190,
+  streetSpacing: 40,
+  streetWidth: 12,
+  blockSize: 28,
+  // The highway ring that circles the city.
+  ringRadius: 205,
+  // Sea to the south (negative Z is the coast), beach and boardwalk there.
+  coastZ: -190,
+  beachDepth: 26,
 };
 
-export const COLOURS = {
-  skyDay: 0x87bfe8,
+export const PALETTE = {
+  skyDay: 0x8ec9ee,
   skyNight: 0x0b1026,
-  sunDay: 0xfff2d0,
-  sunNight: 0x8fa3ff,
-  asphalt: 0x2b2e36,
-  sidewalk: 0x9aa0a8,
-  sand: 0xe8d29a,
-  ocean: 0x1d6f9e,
-  grass: 0x5d8a4a,
-  buildingPalette: [0xcf8f6a, 0x7fa8c9, 0xc9b458, 0x8a7fb8, 0x6fb08a, 0xd98a8a, 0x9fb4c7, 0xe0a458],
-  neonPalette: [0xff2e88, 0x00e5ff, 0xffd400, 0x7cff00, 0xff6a00, 0xb967ff],
-  carPalette: [0xd23b2e, 0x2e6fd2, 0xf2c230, 0xeeeeee, 0x222222, 0x2fae6e, 0x7a4fd0, 0xff7a1a, 0xff2e88, 0x00c8d8, 0x9dff00, 0xe040fb, 0x20c5ba, 0xff4d4d],
+  fogDay: 0xa8c8e8,
+  fogNight: 0x0d1428,
+  asphalt: 0x2a2d34,
+  asphaltLine: 0xd8d8c8,
+  sidewalk: 0x6a6f78,
+  sand: 0xd9c08a,
+  grass: 0x3f7a3a,
+  sea: 0x1a5f8a,
+  boardwalk: 0x8a6a44,
+  // Neon sign colours, bright and saturated.
+  neonPink: 0xff2e88,
+  neonCyan: 0x00e5ff,
+  neonGold: 0xffc233,
+  neonGreen: 0x39ff88,
+  neonPurple: 0xb44dff,
+  neonRed: 0xff3b30,
+  // Glass towers: deep blue glass with a warm lit-window glow.
+  glass: 0x1d3a5f,
+  glassEdge: 0x3d6a9a,
+  windowWarm: 0xffd27a,
+  windowCool: 0x9fd8ff,
+};
+
+export const CAR = {
+  accel: 26,
+  brake: 42,
+  maxSpeed: 46,
+  maxReverse: 12,
+  steer: 0.55,
+  grip: 0.92,
+  handbrakeGrip: 0.45,
+  // Traffic cars cruise slower and keep to their lane.
+  trafficSpeed: 9,
+  trafficCount: 20,
 };
 
 export const PLAYER = {
   walkSpeed: 6,
   runSpeed: 10,
-  radius: 0.7,
-  maxHealth: 100,
-  punchDamage: 25,
-  punchRange: 2.4,
-  punchCooldown: 0.45,
-  pistolDamage: 55,
-  pistolRange: 42,
-  pistolMagazine: 12,
-  reloadSeconds: 1.8,
+  health: 100,
+  punchDamage: 12,
+  punchRange: 2.2,
+  pistolDamage: 34,
+  pistolMag: 12,
+  pistolRange: 60,
 };
 
-export const CAR = {
-  accel: 16,
-  brake: 30,
-  maxSpeed: 40,
-  reverseMax: 12,
-  steerMax: 0.55,
-  trafficSpeed: 11,
-  policeSpeed: 44,
-  radius: 1.6,
+export const POLICE = {
+  maxWanted: 5,
+  // How many patrol cars chase at each wanted level.
+  chaseCars: [0, 1, 2, 3, 4, 5],
+  chaseSpeed: 40,
+  heliAtWanted: 4,
+  // Wanted decays when the player is out of sight of every cop.
+  decayDelay: 6,
+  decayRate: 0.35,
+  bustDistance: 2.4,
 };
 
-export const WANTED = {
-  // Heat 0..100; stars = floor(heat / 20), capped at 5.
-  stealCar: 22,
-  hitPedestrian: 25,
-  shoot: 14,
-  hitPolice: 30,
-  decayPerSecond: 3.5,
-  decayDelayAfterCrime: 6,
+export const PEDS = {
+  count: 35,
+  walkSpeed: 1.6,
+  scatterRadius: 14,
 };
 
+// The six-mission chain. Each mission is a list of steps; a step is one of:
+//   goto      — reach the marker (radius given)
+//   pickup    — press E at the marker to pick something up
+//   deliverCar— drive the named car to the marker without wrecking it
+//   follow    — stay inside the tail zone behind the target, never too close
+//   escape    — lose the wanted level, then reach the marker
+//   hold      — hold E at the marker for `seconds`
+// A step's `at` is a world position [x, z]. Rewards pay on completion.
 export const MISSIONS = [
   {
-    id: 1,
-    title: 'First Pickup',
-    reward: 300,
-    briefing: 'Mara needs a package from the marina crate. Grab it and bring it back to the hideout.',
-  },
-  {
-    id: 2,
-    title: 'Hot Wheels',
+    id: 'm1',
+    name: 'First Light',
     reward: 500,
-    briefing: 'A yellow Comet GT is parked downtown. Steal it and deliver it to the garage — no scratches, no cops.',
+    briefing: 'Kai, the package is waiting at the docks. Bring it to the hideout. Keep it quiet.',
+    steps: [
+      { type: 'goto', at: [-150, -165], radius: 6, label: 'Drive to the docks' },
+      { type: 'pickup', at: [-150, -165], radius: 4, label: 'Pick up the package (E)' },
+      { type: 'goto', at: [120, 120], radius: 6, label: 'Deliver it to the hideout' },
+    ],
   },
   {
-    id: 3,
-    title: 'Tail the Courier',
-    reward: 700,
-    briefing: 'Follow the courier van across town. Stay 15 to 40 metres back — if he spots you, the deal is off.',
+    id: 'm2',
+    name: 'The Comet GT',
+    reward: 1200,
+    briefing: 'A Comet GT is parked outside the casino. Take it. Bring it to the garage in one piece.',
+    steps: [
+      { type: 'goto', at: [80, -40], radius: 6, label: 'Find the Comet GT' },
+      { type: 'deliverCar', at: [-120, 80], radius: 7, label: 'Steal the Comet GT (E) and drive it to the garage' },
+    ],
   },
   {
-    id: 4,
-    title: 'Heat Escape',
-    reward: 900,
-    briefing: 'The setup went loud. Three stars and the whole Bay PD on your tail. Lose them, then get to the hideout.',
+    id: 'm3',
+    name: 'Tail the Courier',
+    reward: 2000,
+    briefing: 'A courier is moving product through downtown. Follow him. Do not let him see you.',
+    steps: [
+      { type: 'follow', at: [0, 0], radius: 26, label: 'Tail the courier — stay in the zone, not too close' },
+    ],
   },
   {
-    id: 5,
-    title: 'The Bay Heist',
-    reward: 5000,
-    briefing: 'The vault under Coral Bank. Crack it, grab the cash, and escape to the yacht while the city burns.',
+    id: 'm4',
+    name: 'Heat Escape',
+    reward: 3500,
+    briefing: 'Three stars and the whole precinct on your tail. Lose them and get to the safehouse.',
+    steps: [
+      { type: 'escape', at: [-120, 120], radius: 8, label: 'Lose the cops, then reach the safehouse' },
+    ],
   },
   {
-    id: 6,
-    title: 'King of the Bay',
+    id: 'm5',
+    name: 'The Coral Bank Job',
+    reward: 6000,
+    briefing: 'The Coral Bank vault. Hold the drill steady, grab the cash, and get out before the sirens close in.',
+    steps: [
+      { type: 'goto', at: [40, 40], radius: 6, label: 'Get to the Coral Bank' },
+      { type: 'hold', at: [40, 40], radius: 5, seconds: 8, label: 'Crack the vault — hold E for 8 seconds' },
+      { type: 'goto', at: [-120, 120], radius: 8, label: 'Escape with the cash' },
+    ],
+  },
+  {
+    id: 'm6',
+    name: 'King of the Bay',
     reward: 10000,
-    briefing: 'The heist cash is hot and the whole Bay PD is hunting it. Lose the cops, bring the money home to Mara, and count the take — then the Bay is yours.',
+    briefing: 'The finale. Four stars, one bag of cash, one hideout. Bring it home and Neon Bay is yours.',
+    steps: [
+      { type: 'goto', at: [0, -120], radius: 6, label: 'Grab the cash at the marina' },
+      { type: 'escape', at: [120, 120], radius: 8, label: 'Escape the 4-star heat to the hideout' },
+      { type: 'hold', at: [120, 120], radius: 5, seconds: 6, label: 'Stash the cash — hold E for 6 seconds' },
+    ],
   },
 ];
 
-export const SAVE_KEY = 'neonbay-save-v1';
-
-export const SHOT_SEED = 1337;
+// Where the player, the key cars and the mission markers start.
+export const SPAWNS = {
+  player: [0, 40],
+  cometGT: [80, -40],
+  courier: [-80, 80],
+  bank: [40, 40],
+  hideout: [120, 120],
+  safehouse: [-120, 120],
+  marina: [0, -120],
+  docks: [-150, -165],
+};

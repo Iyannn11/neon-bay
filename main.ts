@@ -1,42 +1,92 @@
-// Neon Bay — a gta6-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, three.js vendored under game/vendor/, no network request), and the program hands it
-// in. It copies game/ and screenshots/ from beside this file to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
-// Neon Bay is a complete open-world crime game: a procedural coastal city to explore on foot
-// and by car, traffic and pedestrians, cars to steal, a wanted level with police pursuit, six
-// chained story missions, combat, a HUD with a minimap, start/pause/game-over screens and a
-// localStorage save. Put 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is
-// the cover) and run it.
-//
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// main.ts — Neon Bay's hand-in program (Node 22, standard library only).
+// It gathers the game and its screenshots from beside this file, drops them
+// into the output folder, and writes the dossier the judge reads, using the
+// kit's own buildDossier. Outside the grader, MAKEFUN_OUTPUT_DIR stands in
+// for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+//
+// The caps below are the scorer's own (reference/gate.json): the text cap
+// shapes the dossier's bytes; the rest refuse an entry the scorer would
+// refuse anyway, so a bad build fails here first, loudly, instead of at
+// grading time.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// Where the repository lives and where the hand-in goes.
+const repoRoot = fileURLToPath(new URL('.', import.meta.url));
+const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
+const gameDir = join(repoRoot, 'game');
+const shotsDir = join(repoRoot, 'screenshots');
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+// The scorer's caps, in the same units it uses.
+const CAPS = {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+  game_path_max_bytes: 1000,
+};
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
+function countGameFiles(dir, base = dir) {
+  let files = 0;
+  let bytes = 0;
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) {
+      const sub = countGameFiles(full, base);
+      files += sub.files;
+      bytes += sub.bytes;
+    } else {
+      files += 1;
+      bytes += st.size;
+      const rel = full.slice(base.length);
+      if (Buffer.byteLength(rel, 'utf8') > CAPS.game_path_max_bytes) {
+        throw new Error('game path too long: ' + rel);
+      }
+    }
+  }
+  return { files, bytes };
+}
+
+function checkShots() {
+  if (!existsSync(shotsDir)) throw new Error('screenshots/ is missing');
+  const names = readdirSync(shotsDir).filter((n) => !n.startsWith('.'));
+  if (names.length < 3 || names.length > CAPS.screenshots.max) {
+    throw new Error('expected 3 or 4 screenshots, found ' + names.length);
+  }
+  for (const name of names) {
+    const size = statSync(join(shotsDir, name)).size;
+    if (size > CAPS.screenshots.max_bytes) {
+      throw new Error('screenshot over 256 KiB: ' + name + ' (' + size + ' bytes)');
+    }
+  }
+  return names;
+}
+
+// Fail fast on anything the gate would refuse.
+const gameTotals = countGameFiles(gameDir);
+if (gameTotals.files > CAPS.game_max_files) {
+  throw new Error('game/ has ' + gameTotals.files + ' files, cap is ' + CAPS.game_max_files);
+}
+if (gameTotals.bytes > CAPS.game_max_bytes) {
+  throw new Error('game/ is ' + gameTotals.bytes + ' bytes, cap is ' + CAPS.game_max_bytes);
+}
+const shotNames = checkShots();
+
+// Copy the entry into the output folder, then write the dossier from it.
+mkdirSync(outDir, { recursive: true });
+cpSync(gameDir, join(outDir, 'game'), { recursive: true });
+mkdirSync(join(outDir, 'screenshots'), { recursive: true });
+cpSync(shotsDir, join(outDir, 'screenshots'), { recursive: true });
+
+const dossier = buildDossier(outDir, CAPS);
+writeFileSync(join(outDir, 'dossier.json'), dossier);
+
+console.log(
+  'Neon Bay handed in: ' + gameTotals.files + ' game files (' + gameTotals.bytes + ' bytes), '
+  + shotNames.length + ' screenshots, dossier ' + Buffer.byteLength(dossier, 'utf8') + ' bytes -> ' + outDir,
 );

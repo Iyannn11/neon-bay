@@ -1,37 +1,49 @@
-// Neon Bay — save / load through localStorage. Only progress numbers are
-// stored: cash, respect, the mission index and whether the story is done.
-// Nothing here is read by the grader; it is a player feature.
+// save.js — Neon Bay's save file. One key in localStorage, plain JSON:
+// cash, the missions finished, the best (highest) cash ever held and the total
+// time played. Nothing else leaves the browser.
 
-import { SAVE_KEY } from './config.js';
+const KEY = 'neon-bay-save-v1';
 
-export function defaultSave() {
-  return { cash: 150, respect: 0, missionIndex: 0, storyDone: false };
+export function blankSave() {
+  return {
+    cash: 0,
+    missionsDone: [],
+    bestCash: 0,
+    secondsPlayed: 0,
+    savedAt: 0,
+  };
 }
 
 export function loadSave() {
   try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return blankSave();
     const data = JSON.parse(raw);
-    if (typeof data.cash !== 'number' || typeof data.missionIndex !== 'number') return null;
-    return { ...defaultSave(), ...data };
-  } catch (error) {
-    return null;
+    const save = blankSave();
+    if (typeof data.cash === 'number') save.cash = data.cash;
+    if (Array.isArray(data.missionsDone)) save.missionsDone = data.missionsDone;
+    if (typeof data.bestCash === 'number') save.bestCash = data.bestCash;
+    if (typeof data.secondsPlayed === 'number') save.secondsPlayed = data.secondsPlayed;
+    return save;
+  } catch (err) {
+    return blankSave();
   }
 }
 
 export function writeSave(save) {
   try {
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
-  } catch (error) {
-    // Storage may be unavailable (private mode); the game plays on.
+    const copy = { ...save, savedAt: Date.now() };
+    window.localStorage.setItem(KEY, JSON.stringify(copy));
+    return true;
+  } catch (err) {
+    return false;
   }
 }
 
 export function clearSave() {
   try {
-    window.localStorage.removeItem(SAVE_KEY);
-  } catch (error) {
-    // Ignore.
+    window.localStorage.removeItem(KEY);
+  } catch (err) {
+    // Storage may be unavailable; the game still plays.
   }
 }
