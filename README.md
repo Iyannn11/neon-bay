@@ -6,8 +6,9 @@
 
 **Neon Bay** is a complete open-world crime game for the make.fun "Make GTA 6"
 bounty: explore a sun-soaked coastal city on foot and by car, steal cars,
-outrun the Bay PD, fight, and run five story missions as Kai Reyes — from a
-marina pickup to the Coral Bank heist and a yacht escape.
+outrun the Bay PD, fight, and run six story missions as Kai Reyes — from a
+marina pickup to the Coral Bank heist, a yacht escape, and a final run to
+bring the heist cash home.
 
 ## Play
 
@@ -35,7 +36,7 @@ No build step, no network: everything the game loads lives under `game/`.
 - Any car can be stolen (E) — stealing, hitting pedestrians and shooting
   raise the wanted level (0–5 stars); police cars chase, ram and try to bust
   you; heat decays once you are out of sight
-- Five chained story missions with a glowing objective beacon, HUD tracker,
+- Six chained story missions with a glowing objective beacon, HUD tracker,
   minimap blips and an off-screen objective arrow
 - Combat (fists + pistol), police return fire, health, cash and respect
   progression, localStorage saves, start / pause / game-over screens

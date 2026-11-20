@@ -1,4 +1,4 @@
-// Neon Bay — story missions. Five chained jobs for Kai Reyes, each a short
+// Neon Bay — story missions. Six chained jobs for Kai Reyes, each a short
 // list of generic steps: go to a place, pick something up, steal and deliver
 // a car, tail a van without being seen, lose the cops, or hold a spot to
 // crack the vault. The HUD reads the current objective text and target
@@ -17,7 +17,7 @@ function stepText(step) {
   return '';
 }
 
-// Build the five missions from the city landmarks. `world` carries the
+// Build the six missions from the city landmarks. `world` carries the
 // landmarks, the courier van state and the special yellow car.
 export function createMissions(world) {
   const L = world.landmarks;
@@ -57,6 +57,14 @@ export function createMissions(world) {
         { type: 'goto', pos: L.bank, radius: 7, text: 'Reach Coral Bank downtown' },
         { type: 'hold', pos: L.bank, radius: 6, duration: 5, text: 'Hold E at the vault to crack it' },
         { type: 'goto', pos: L.yacht, radius: 8, text: 'Escape to the yacht with the cash' },
+      ],
+    },
+    {
+      def: MISSIONS[5],
+      steps: [
+        { type: 'escape', pos: null, radius: 0, text: 'Lose the cops — the whole Bay PD wants the heist cash' },
+        { type: 'goto', pos: L.hideout, radius: 6, text: 'Bring the cash home to Mara at the hideout' },
+        { type: 'hold', pos: L.hideout, radius: 6, duration: 6, text: 'Hold E to count the take with Mara' },
       ],
     },
   ];

@@ -1,6 +1,6 @@
 // Neon Bay — boot, game loop, camera, player and the glue between systems.
 // The player explores Neon Bay on foot or by car, steals cars, dodges the
-// Bay PD, fights, and runs five story missions for Kai Reyes.
+// Bay PD, fights, and runs six story missions for Kai Reyes.
 
 import * as THREE from 'three';
 import { WORLD, COLOURS, PLAYER, CAR, WANTED, SHOT_SEED } from './config.js';
@@ -58,8 +58,8 @@ scene.add(hemi);
 
 // ---------- World ----------
 const city = createCity(scene, rng);
-const traffic = spawnTraffic(scene, rng, 14, new THREE.Vector3(0, 0, 24));
-const peds = spawnPedestrians(scene, rng, 26, new THREE.Vector3(0, 0, 24));
+const traffic = spawnTraffic(scene, rng, 20, new THREE.Vector3(0, 0, 24));
+const peds = spawnPedestrians(scene, rng, 38, new THREE.Vector3(0, 0, 24));
 const police = createPolice(scene);
 const combat = createCombat();
 const audio = createAudio();
@@ -184,6 +184,14 @@ const G = {
   setCameraYaw(yaw) { cameraYaw = yaw; },
   shotAutopilot: null,
   shotTitle: null,
+  // Screenshot scenes may tighten the camera (closer, lower) for a more
+  // cinematic frame; null means the normal gameplay distance/height.
+  shotCameraDist: null,
+  shotCameraHeight: null,
+  // Screenshot scenes snap the camera to the staged frame on the first
+  // frame instead of lerping there: the shot must be framed correctly even
+  // if only a few frames run before the capture.
+  snapCamera: false,
 };
 
 function setNightFlag(flag) {
@@ -191,21 +199,21 @@ function setNightFlag(flag) {
   G.isNight = flag;
   scene.background = new THREE.Color(flag ? COLOURS.skyNight : COLOURS.skyDay);
   scene.fog.color = new THREE.Color(flag ? 0x0b1026 : 0x9fc4e0);
-  sun.intensity = flag ? 0.5 : 2.4;
+  sun.intensity = flag ? 0.65 : 2.4;
   sun.color = new THREE.Color(flag ? COLOURS.sunNight : COLOURS.sunDay);
-  hemi.intensity = flag ? 0.35 : 0.9;
+  hemi.intensity = flag ? 0.5 : 0.9;
   city.setNight(flag);
 }
 
 function applySaveToMissions() {
-  missions.index = Math.min(save.missionIndex, 4);
+  missions.index = Math.min(save.missionIndex, 5);
   missions.done = save.storyDone;
 }
 
 function persistSave() {
   writeSave({
     cash, respect,
-    missionIndex: missions.done ? 5 : missions.index,
+    missionIndex: missions.done ? 6 : missions.index,
     storyDone: missions.done,
   });
 }
@@ -217,6 +225,10 @@ function startMission() {
   if (missions.index === 3) {
     // Heat Escape starts loud: three stars from the setup.
     addHeat(police.wanted, 65, elapsed);
+  }
+  if (missions.index === 5) {
+    // King of the Bay starts louder: four stars hunting the heist cash.
+    addHeat(police.wanted, 80, elapsed);
   }
   if (missions.index === 2) {
     spawnCourierVan();
@@ -310,8 +322,8 @@ function cameraForward() {
 
 function updateCamera(dt) {
   const target = player.driving ? player.driving.mesh.position : player.pos;
-  const dist = player.driving ? 13 : cameraDistance;
-  const height = player.driving ? 6 : 3.6;
+  const dist = G.shotCameraDist ?? (player.driving ? 13 : cameraDistance);
+  const height = G.shotCameraHeight ?? (player.driving ? 6 : 3.6);
   // On foot the view yaw is cameraYaw; in a car it orbits the car heading.
   const yaw = player.driving ? player.driving.heading + cameraYaw : cameraYaw;
   const desired = new THREE.Vector3(
@@ -319,7 +331,12 @@ function updateCamera(dt) {
     target.y + height,
     target.z - Math.cos(yaw) * dist,
   );
-  camera.position.lerp(desired, Math.min(1, dt * 5));
+  if (G.snapCamera) {
+    camera.position.copy(desired);
+    G.snapCamera = false;
+  } else {
+    camera.position.lerp(desired, Math.min(1, dt * 5));
+  }
   const look = new THREE.Vector3(target.x, target.y + 1.6, target.z);
   camera.lookAt(look);
   if (player.shake > 0.01) {

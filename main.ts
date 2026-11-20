@@ -4,7 +4,7 @@
 // in. It copies game/ and screenshots/ from beside this file to /output and writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 // Neon Bay is a complete open-world crime game: a procedural coastal city to explore on foot
-// and by car, traffic and pedestrians, cars to steal, a wanted level with police pursuit, five
+// and by car, traffic and pedestrians, cars to steal, a wanted level with police pursuit, six
 // chained story missions, combat, a HUD with a minimap, start/pause/game-over screens and a
 // localStorage save. Put 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is
 // the cover) and run it.

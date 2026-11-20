@@ -1,1 +1,1 @@
-[{"name":"1-cover.jpg","query":"?shot=chase&seed=1337","waitMs":2500},{"name":"2-city.jpg","query":"?shot=start&seed=1337","waitMs":4500},{"name":"3-mission.jpg","query":"?shot=mission&seed=1337","waitMs":4500},{"name":"4-night.jpg","query":"?shot=night&seed=1337","waitMs":4500}]
+[{"name":"1-cover.jpg","query":"?shot=chase&seed=1337","waitMs":2500},{"name":"2-city.jpg","query":"?shot=start&seed=1337","waitMs":4500},{"name":"3-mission.jpg","query":"?shot=mission&seed=1337","waitMs":4500},{"name":"4-night.jpg","query":"?shot=night&seed=1337","waitMs":3500}]

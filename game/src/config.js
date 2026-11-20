@@ -96,6 +96,12 @@ export const MISSIONS = [
     reward: 5000,
     briefing: 'The vault under Coral Bank. Crack it, grab the cash, and escape to the yacht while the city burns.',
   },
+  {
+    id: 6,
+    title: 'King of the Bay',
+    reward: 10000,
+    briefing: 'The heist cash is hot and the whole Bay PD is hunting it. Lose the cops, bring the money home to Mara, and count the take — then the Bay is yours.',
+  },
 ];
 
 export const SAVE_KEY = 'neonbay-save-v1';

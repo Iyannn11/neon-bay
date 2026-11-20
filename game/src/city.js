@@ -293,10 +293,10 @@ export function createCity(scene, rng) {
       return phase === 1;
     },
     setNight(isNight) {
-      for (const mat of streetlights) mat.emissiveIntensity = isNight ? 1.6 : 0.15;
+      for (const mat of streetlights) mat.emissiveIntensity = isNight ? 2.4 : 0.15;
       for (const mat of windowMeshes) {
         mat.emissive = new THREE.Color(isNight ? 0xffb85c : 0x000000);
-        mat.emissiveIntensity = isNight ? 0.8 : 0;
+        mat.emissiveIntensity = isNight ? 1.1 : 0;
       }
     },
   };
