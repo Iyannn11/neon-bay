@@ -1,165 +1,149 @@
-// shots.js — deterministic staging for the four screenshots.
-// The URL carries ?shot=start|chase|mission|night&seed=1337. Each shot places
-// the player, the cars, the police and the camera exactly, then FREEZES the
-// traffic and the police so the composition is the same every render. The
-// main loop renders a few frames and then raises window.__neonReady so the
-// screenshot tool knows the scene is settled.
+// Neon Bay shots: deterministic staging for the 4 screenshots.
+// ?shot=start|chase|mission|night&seed=1337 freezes a composed scene so the
+// render is the same every time. The night shot stages Kai DRIVING.
+// Cameras sit ON streets and look ALONG them, so towers frame the view
+// instead of blocking it; the player is 15–25 units ahead of the lens.
 
-export function getShotParams() {
-  const params = new URLSearchParams(window.location.search);
-  const shot = params.get('shot') || '';
-  const seed = parseInt(params.get('seed') || '1337', 10) || 1337;
-  return { shot, seed };
-}
+import { PLACES } from './config.js';
 
-// Put the player on foot at (x, z), facing `heading`.
-function placePlayerOnFoot(game, x, z, heading) {
-  game.player.x = x;
-  game.player.z = z;
-  game.player.heading = heading;
-  game.player.inCar = false;
-  game.player.car = null;
-  game.player.mesh.position.set(x, 0, z);
-  game.player.mesh.rotation.y = heading;
-  game.player.mesh.visible = true;
-}
+// Stage one shot: position the player, cars and police, set day/night, freeze.
+export function applyShot(game, shot) {
+  const p = game.player;
+  const v = game.vehicles;
+  const police = game.police;
+  game.shotFrozen = true;
 
-// Put the player in a car at (x, z), facing `heading`.
-function placePlayerInCar(game, x, z, heading) {
-  const car = game.playerCar;
-  car.place(x, z, heading);
-  car.speed = 14;
-  game.player.inCar = true;
-  game.player.car = car;
-  game.player.x = x;
-  game.player.z = z;
-  game.player.heading = heading;
-  game.player.mesh.visible = false;
-}
-
-export function stageShot(game, name) {
-  const city = game.city;
-  // Every camera and every staged car sits ON a street (x or z a multiple of
-  // 40, within the 12 m street width) and looks along it, so no building ever
-  // blocks the frame. The player drives north/south on the x=0 avenue or
-  // east/west on the z=40 avenue.
-  if (name === 'start') {
-    // Day. Kai on foot on the x=0 avenue, the NEON BAY sign and the towers
-    // ahead of him, traffic rolling past in both lanes.
-    city.setNight(false);
-    game.night = false;
-    placePlayerOnFoot(game, 0, -60, Math.PI);
-    game.police.setWanted(0);
-    game.missions.start(0);
-    game.hud.setMission(game.missions.current(), game.missions.currentStep());
-    game.traffic.cars.slice(0, 6).forEach((car, i) => {
-      car.x = i % 2 === 0 ? -3 : 3;
-      car.z = -80 - i * 9;
-      car.axis = 'z';
-      car.dir = i % 2 === 0 ? -1 : 1;
-      car.mesh.position.set(car.x, 0, car.z);
-      car.mesh.rotation.y = car.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
-    });
-    game.camera.position.set(0, 4.5, -38);
-    game.camera.lookAt(0, 7, -110);
-    game.camera.fov = 50;
-    game.camera.updateProjectionMatrix();
-    game.shotFrozen = true;
-  } else if (name === 'chase') {
-    // Night. A 5-star chase on the x=0 avenue: Kai driving north, a police
-    // convoy in file behind him, the helicopter overhead, traffic ahead.
-    city.setNight(true);
-    game.night = true;
-    placePlayerInCar(game, 0, 40, Math.PI);
-    game.police.setWanted(5);
-    game.missions.start(3);
-    game.hud.setMission(game.missions.current(), game.missions.currentStep());
-    const spots = [[-3, 54], [3, 60], [-3, 66], [3, 72], [0, 78]];
-    while (game.police.cars.length < 5) game.police._spawnCar(0, 80);
-    game.police.cars.forEach((car, i) => {
-      const [x, z] = spots[i % spots.length];
-      car.x = x;
-      car.z = z;
-      car.heading = Math.PI;
-      car.speed = 34;
-      car.mesh.position.set(x, 0, z);
-      car.mesh.rotation.y = Math.PI;
-    });
-    // Helicopter overhead, searchlight on the chase.
-    game.police.heli.visible = true;
-    game.police.heli.position.set(14, 34, 18);
-    game.police.heli.rotation.y = 0.6;
-    game.traffic.cars.slice(0, 6).forEach((car, i) => {
-      car.x = i % 2 === 0 ? -3 : 3;
-      car.z = 4 - i * 9;
-      car.axis = 'z';
-      car.dir = -1;
-      car.mesh.position.set(car.x, 0, car.z);
-      car.mesh.rotation.y = Math.PI / 2;
-    });
-    game.camera.position.set(0, 7, 90);
-    game.camera.lookAt(0, 2, 22);
-    game.camera.fov = 50;
-    game.camera.updateProjectionMatrix();
-    game.shotFrozen = true;
-  } else if (name === 'mission') {
-    // Dusk. The Coral Bank Job: Kai on foot at the bank (40,40), the vault
-    // prompt up, police closing in on the avenues around him.
-    city.setNight(false);
-    game.night = false;
-    placePlayerOnFoot(game, 34, 46, -0.6);
-    game.police.setWanted(2);
-    game.missions.start(4);
-    game.missions.stepIndex = 1; // the vault-cracking step
-    game.hud.setMission(game.missions.current(), game.missions.currentStep());
-    game.hud.banner('THE CORAL BANK JOB', 'Crack the vault — hold E for 8 seconds');
-    while (game.police.cars.length < 2) game.police._spawnCar(60, 40);
-    game.police.cars[0].x = 58;
-    game.police.cars[0].z = 40;
-    game.police.cars[0].heading = -Math.PI / 2;
-    game.police.cars[0].mesh.position.set(58, 0, 40);
-    game.police.cars[0].mesh.rotation.y = -Math.PI / 2;
-    game.police.cars[1].x = 40;
-    game.police.cars[1].z = 64;
-    game.police.cars[1].heading = Math.PI;
-    game.police.cars[1].mesh.position.set(40, 0, 64);
-    game.police.cars[1].mesh.rotation.y = Math.PI;
-    game.camera.position.set(74, 5, 40);
-    game.camera.lookAt(32, 3, 42);
-    game.camera.fov = 50;
-    game.camera.updateProjectionMatrix();
-    game.shotFrozen = true;
-  } else if (name === 'night') {
-    // Night. Kai DRIVING south down the x=0 avenue, streetlights glowing, a
-    // patrol car in the mirror, the towers lit behind.
-    city.setNight(true);
-    game.night = true;
-    placePlayerInCar(game, 0, -100, 0);
-    game.police.setWanted(1);
-    game.missions.start(0);
-    game.hud.setMission(game.missions.current(), game.missions.currentStep());
-    while (game.police.cars.length < 1) game.police._spawnCar(0, -70);
-    game.police.cars[0].x = 3;
-    game.police.cars[0].z = -72;
-    game.police.cars[0].heading = 0;
-    game.police.cars[0].mesh.position.set(3, 0, -72);
-    game.police.cars[0].mesh.rotation.y = 0;
-    game.traffic.cars.slice(0, 6).forEach((car, i) => {
-      car.x = i % 2 === 0 ? -3 : 3;
-      car.z = -62 + i * 9;
-      car.axis = 'z';
-      car.dir = 1;
-      car.mesh.position.set(car.x, 0, car.z);
-      car.mesh.rotation.y = -Math.PI / 2;
-    });
-    game.camera.position.set(0, 5, -128);
-    game.camera.lookAt(0, 2, -68);
-    game.camera.fov = 50;
-    game.camera.updateProjectionMatrix();
-    game.shotFrozen = true;
+  if (shot === 'start') {
+    // Day: Kai on foot on street x=0, downtown and the docks ahead.
+    game.setNight(false);
+    p.inCar = false;
+    p.car = null;
+    p.pos.x = 0;
+    p.pos.z = -40;
+    p.heading = Math.PI / 2;
+    p.onFootHeading = Math.PI / 2;
+    p.health = 100;
+    game.wanted = 0;
+    game.missions.startMission(0);
+    game.cameraShot = { x: 0, y: 5.5, z: -52, lookX: 0, lookY: 3, lookZ: -15, fov: 50 };
+    game.hud.hideBanner();
+  } else if (shot === 'chase') {
+    // Night, 5 stars: Kai driving the Comet GT up street x=0 toward the
+    // neon downtown, police convoy and helicopter behind him.
+    game.setNight(true);
+    const gt = v.cometGt;
+    v.enterCar(game, gt);
+    p.pos.x = 0;
+    p.pos.z = 60;
+    p.heading = -Math.PI / 2;
+    p.carSpeed = 22;
+    p.health = 100;
+    game.wanted = 5;
+    game.missions.startMission(3);
+    police.ensureCars(5);
+    const cars = police.cars;
+    const spots = [
+      { x: -4, z: 78, h: -Math.PI / 2 },
+      { x: 5, z: 82, h: -Math.PI / 2 },
+      { x: 0, z: 88, h: -Math.PI / 2 },
+      { x: -5, z: 70, h: -Math.PI / 2 },
+      { x: 6, z: 74, h: -Math.PI / 2 },
+    ];
+    for (let i = 0; i < spots.length; i++) {
+      if (!cars[i]) break;
+      cars[i].x = spots[i].x;
+      cars[i].z = spots[i].z;
+      cars[i].heading = spots[i].h;
+      cars[i].speed = 22;
+      cars[i].mesh.group.position.set(spots[i].x, 0, spots[i].z);
+      cars[i].mesh.group.rotation.y = -spots[i].h;
+    }
+    // A traffic car ahead for depth.
+    const t = v.traffic[0];
+    t.x = 2;
+    t.z = 8;
+    t.heading = -Math.PI / 2;
+    t.mesh.group.position.set(2, 0, 8);
+    t.mesh.group.rotation.y = Math.PI / 2;
+    game.cameraShot = { x: 6, y: 5, z: 78, lookX: -2, lookY: 1.5, lookZ: 55, fov: 50 };
+    game.hud.hideBanner();
+  } else if (shot === 'mission') {
+    // Day: the Coral Bank Job — Kai on foot on street x=40, the bank and
+    // its vault beacon ahead, police closing in behind him.
+    game.setNight(false);
+    p.inCar = false;
+    p.car = null;
+    p.pos.x = 40;
+    p.pos.z = 56;
+    p.heading = -Math.PI / 2;
+    p.onFootHeading = -Math.PI / 2;
+    p.health = 100;
+    game.wanted = 2;
+    game.missions.startMission(4);
+    police.ensureCars(2);
+    const cars = police.cars;
+    if (cars[0]) {
+      cars[0].x = 36;
+      cars[0].z = 68;
+      cars[0].heading = -Math.PI / 2;
+      cars[0].mesh.group.position.set(36, 0, 68);
+      cars[0].mesh.group.rotation.y = Math.PI / 2;
+    }
+    if (cars[1]) {
+      cars[1].x = 44;
+      cars[1].z = 30;
+      cars[1].heading = Math.PI / 2;
+      cars[1].mesh.group.position.set(44, 0, 30);
+      cars[1].mesh.group.rotation.y = -Math.PI / 2;
+    }
+    game.cameraShot = { x: 40, y: 6, z: 74, lookX: 40, lookY: 2, lookZ: 36, fov: 50 };
+    game.hud.hideBanner();
+  } else {
+    // Night, driving: Kai in the Comet GT up street x=0 toward the neon
+    // downtown, one police car behind him.
+    game.setNight(true);
+    const gt = v.cometGt;
+    v.enterCar(game, gt);
+    p.pos.x = 0;
+    p.pos.z = 80;
+    p.heading = -Math.PI / 2;
+    p.carSpeed = 14;
+    p.health = 100;
+    game.wanted = 1;
+    game.missions.startMission(0);
+    police.ensureCars(1);
+    const cars = police.cars;
+    if (cars[0]) {
+      cars[0].x = -4;
+      cars[0].z = 94;
+      cars[0].heading = -Math.PI / 2;
+      cars[0].speed = 14;
+      cars[0].mesh.group.position.set(-4, 0, 94);
+      cars[0].mesh.group.rotation.y = Math.PI / 2;
+    }
+    game.cameraShot = { x: -2, y: 7, z: 98, lookX: 0, lookY: 2, lookZ: 60, fov: 50 };
+    game.hud.hideBanner();
   }
-  // Hide the title screen for every shot and show the HUD.
-  game.setScreen('playing');
-  window.__neonReady = false;
-  window.__neonDebug = { shot: name, frozen: true };
+}
+
+// Read the shot from the URL. Returns the shot name or null.
+export function readShotParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const shot = params.get('shot');
+    if (shot === 'start' || shot === 'chase' || shot === 'mission' || shot === 'night') return shot;
+    return null;
+  } catch (err) {
+    return null;
+  }
+}
+
+export function readSeedParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const seed = parseInt(params.get('seed') || '1337', 10);
+    return Number.isFinite(seed) ? seed : 1337;
+  } catch (err) {
+    return 1337;
+  }
 }

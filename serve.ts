@@ -1,50 +1,51 @@
-// serve.ts — a tiny static file server for playing Neon Bay locally.
-// Run `node serve.ts`, then open http://localhost:8080. The root path
-// redirects to /game/index.html keeping the query string, so a screenshot
-// URL like /?shot=chase&seed=1337 still reaches the game and its relative
-// module imports resolve. Only files under this directory are served.
+// Neon Bay — a tiny static server for local testing (port 8080).
+// Serves the repository root so /game/index.html plays offline.
+// `node serve.ts`, then open http://localhost:8080/game/index.html
+// (or http://localhost:8080, which redirects to the game, keeping ?shot=).
 
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
 
-const TYPES = {
+const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
-  '.ts': 'text/plain; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
+  '.png': 'image/png',
+  '.css': 'text/css; charset=utf-8',
 };
 
-const server = createServer((req, res) => {
-  const url = new URL(req.url || '/', 'http://localhost');
-  // The root redirects to the game, keeping ?shot= and &seed= intact.
-  if (url.pathname === '/') {
-    res.writeHead(302, { Location: '/game/index.html' + url.search });
-    res.end();
-    return;
-  }
-  const rel = normalize(decodeURIComponent(url.pathname)).replace(/^[/\\]+/, '');
-  const full = join(root, rel);
-  if (!full.startsWith(root) || !existsSync(full) || !statSync(full).isFile()) {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
+const server = createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url || '/', `http://localhost:${port}`);
+    if (url.pathname === '/') {
+      res.writeHead(302, { Location: `/game/index.html${url.search}` });
+      res.end();
+      return;
+    }
+    const rel = normalize(decodeURIComponent(url.pathname)).replace(/^[/\\]+/, '');
+    const file = join(root, rel);
+    if (!file.startsWith(root)) {
+      res.writeHead(403);
+      res.end('forbidden');
+      return;
+    }
+    const data = await readFile(file);
+    res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream' });
+    res.end(data);
+  } catch (err) {
+    res.writeHead(404);
     res.end('not found');
-    return;
   }
-  res.writeHead(200, { 'Content-Type': TYPES[extname(full)] || 'application/octet-stream' });
-  createReadStream(full).pipe(res);
 });
 
 server.listen(port, () => {
-  console.log('Neon Bay at http://localhost:' + port + ' (root redirects to /game/index.html)');
+  console.log(`Neon Bay serving at http://localhost:${port}/game/index.html`);
 });

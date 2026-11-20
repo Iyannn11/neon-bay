@@ -1,7 +1,5 @@
-// random.js — deterministic seeded random numbers for Neon Bay.
-// Every scene, street layout and traffic pattern derives from one seed, so a
-// given seed always builds the same city. The generator is mulberry32, a small
-// fast PRNG with good distribution for a game of this size.
+// Seeded random numbers for Neon Bay: deterministic scenes from one seed.
+// mulberry32 is small, fast and good enough for a city layout and traffic.
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -14,32 +12,36 @@ export function mulberry32(seed) {
   };
 }
 
-// A tiny helper object that wraps a mulberry32 stream with the calls the game
-// actually needs: ranges, integers, picks and coin flips.
+// A tiny helper bundle around one seeded stream.
 export function makeRng(seed) {
   const next = mulberry32(seed);
   return {
     next,
+    // float in [min, max)
     range(min, max) {
       return min + next() * (max - min);
     },
+    // integer in [min, max] inclusive
     int(min, max) {
-      return Math.floor(min + next() * (max - min + 1));
+      return min + Math.floor(next() * (max - min + 1));
     },
+    // pick one element of an array
     pick(list) {
       return list[Math.floor(next() * list.length)];
     },
+    // true with probability p
     chance(p) {
       return next() < p;
     },
-    // A stable hash of a string, so a named place always gets the same seed.
-    hashString(str) {
-      let h = 2166136261;
-      for (let i = 0; i < str.length; i++) {
-        h ^= str.charCodeAt(i);
-        h = Math.imul(h, 16777619);
-      }
-      return h >>> 0;
-    },
   };
+}
+
+// A deterministic hash of a string, so a shot name can seed its own stream.
+export function hashSeed(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }

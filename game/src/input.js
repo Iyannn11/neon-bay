@@ -1,128 +1,143 @@
-// input.js — keyboard, mouse and touch input for Neon Bay.
-// One Input object owns the whole state: which keys are held, the camera drag,
-// and the touch buttons. The game reads it once a frame; nothing else touches
-// the DOM listeners.
+// Neon Bay input: keyboard, mouse-drag camera and touch controls.
+// One object holds the whole input state; the game reads it every frame.
 
-export class Input {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.keys = new Set();
-    this.pressed = new Set();
-    this.mouseDown = false;
-    this.mouseClicked = false;
-    this.dragX = 0;
-    this.dragY = 0;
-    this.touch = { steer: 0, gas: false, brake: false, action: false };
-    this._lastX = 0;
-    this._lastY = 0;
-    this._bind();
+export function createInput(canvas) {
+  const keys = Object.create(null);
+  const state = {
+    keys,
+    // Camera orbit (radians) driven by mouse drag or touch drag.
+    dragX: 0,
+    dragY: 0,
+    dragging: false,
+    // Touch joystick (virtual): -1..1 on each axis while a touch is held.
+    joyX: 0,
+    joyY: 0,
+    joyActive: false,
+    // Edge-triggered actions, consumed by the game each frame.
+    pressedE: false,
+    pressedF: false,
+    pressedR: false,
+    pressedM: false,
+    pressedEsc: false,
+    clicked: false,
+    clickX: 0,
+    clickY: 0,
+  };
+
+  let lastX = 0;
+  let lastY = 0;
+  let joyId = null;
+  let joyOriginX = 0;
+  let joyOriginY = 0;
+
+  function keyName(e) {
+    return (e.key || '').toLowerCase();
   }
 
-  _bind() {
-    window.addEventListener('keydown', (ev) => {
-      if (ev.repeat) return;
-      this.keys.add(ev.code);
-      this.pressed.add(ev.code);
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(ev.code)) {
-        ev.preventDefault();
-      }
-    });
-    window.addEventListener('keyup', (ev) => {
-      this.keys.delete(ev.code);
-    });
-    window.addEventListener('blur', () => {
-      this.keys.clear();
-    });
-    this.canvas.addEventListener('mousedown', (ev) => {
-      this.mouseDown = true;
-      this.mouseClicked = true;
-      this._lastX = ev.clientX;
-      this._lastY = ev.clientY;
-    });
-    window.addEventListener('mouseup', () => {
-      this.mouseDown = false;
-    });
-    window.addEventListener('mousemove', (ev) => {
-      if (!this.mouseDown) return;
-      this.dragX += ev.clientX - this._lastX;
-      this.dragY += ev.clientY - this._lastY;
-      this._lastX = ev.clientX;
-      this._lastY = ev.clientY;
-    });
-    // Touch: left half steers, right half is gas/brake/action.
-    this.canvas.addEventListener('touchstart', (ev) => {
-      ev.preventDefault();
-      this._touchMove(ev);
-    }, { passive: false });
-    this.canvas.addEventListener('touchmove', (ev) => {
-      ev.preventDefault();
-      this._touchMove(ev);
-    }, { passive: false });
-    this.canvas.addEventListener('touchend', () => {
-      this.touch.steer = 0;
-      this.touch.gas = false;
-      this.touch.brake = false;
-      this.touch.action = false;
-    });
-  }
+  window.addEventListener('keydown', (e) => {
+    const k = keyName(e);
+    keys[k] = true;
+    if (k === 'e') state.pressedE = true;
+    if (k === 'f') state.pressedF = true;
+    if (k === 'r') state.pressedR = true;
+    if (k === 'm') state.pressedM = true;
+    if (k === 'escape' || k === 'p') state.pressedEsc = true;
+    if (k === ' ' || k === 'arrowup' || k === 'arrowdown' || k === 'arrowleft' || k === 'arrowright') {
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    keys[keyName(e)] = false;
+  });
+  window.addEventListener('blur', () => {
+    for (const k of Object.keys(keys)) keys[k] = false;
+    state.dragging = false;
+    state.joyActive = false;
+  });
 
-  _touchMove(ev) {
-    const rect = this.canvas.getBoundingClientRect();
-    for (const t of ev.touches) {
-      const x = (t.clientX - rect.left) / rect.width;
-      const y = (t.clientY - rect.top) / rect.height;
-      if (x < 0.5) {
-        this.touch.steer = x < 0.25 ? -1 : 1;
-      } else if (y < 0.5) {
-        this.touch.gas = true;
-      } else if (x < 0.75) {
-        this.touch.brake = true;
+  canvas.addEventListener('mousedown', (e) => {
+    state.dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!state.dragging) return;
+    state.dragX += e.clientX - lastX;
+    state.dragY += e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (state.dragging && Math.abs(e.clientX - lastX) < 5 && Math.abs(e.clientY - lastY) < 5) {
+      state.clicked = true;
+      state.clickX = e.clientX;
+      state.clickY = e.clientY;
+    }
+    state.dragging = false;
+  });
+
+  // Touch: left half is a virtual joystick, right half drags the camera.
+  canvas.addEventListener('touchstart', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.clientX < window.innerWidth / 2 && joyId === null) {
+        joyId = t.identifier;
+        joyOriginX = t.clientX;
+        joyOriginY = t.clientY;
+        state.joyActive = true;
       } else {
-        this.touch.action = true;
+        state.dragging = true;
+        lastX = t.clientX;
+        lastY = t.clientY;
       }
     }
-  }
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchmove', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyId) {
+        state.joyX = Math.max(-1, Math.min(1, (t.clientX - joyOriginX) / 60));
+        state.joyY = Math.max(-1, Math.min(1, (t.clientY - joyOriginY) / 60));
+      } else if (state.dragging) {
+        state.dragX += t.clientX - lastX;
+        state.dragY += t.clientY - lastY;
+        lastX = t.clientX;
+        lastY = t.clientY;
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener('touchend', (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyId) {
+        joyId = null;
+        state.joyX = 0;
+        state.joyY = 0;
+        state.joyActive = false;
+      }
+    }
+    if (e.touches.length === 0) state.dragging = false;
+  });
 
-  // True while the key is held.
-  held(code) {
-    return this.keys.has(code) || this._touchKey(code);
-  }
-
-  // True only on the frame the key went down.
-  wasPressed(code) {
-    return this.pressed.has(code) || (code === 'KeyE' && this.touch.action);
-  }
-
-  _touchKey(code) {
-    if (code === 'KeyW' || code === 'ArrowUp') return this.touch.gas;
-    if (code === 'KeyS' || code === 'ArrowDown') return this.touch.brake;
-    if (code === 'KeyA' || code === 'ArrowLeft') return this.touch.steer < 0;
-    if (code === 'KeyD' || code === 'ArrowRight') return this.touch.steer > 0;
-    return false;
-  }
-
-  // Steering: -1 (left) to +1 (right), from keys or touch.
-  steerAxis() {
-    let s = 0;
-    if (this.held('KeyA') || this.held('ArrowLeft')) s -= 1;
-    if (this.held('KeyD') || this.held('ArrowRight')) s += 1;
-    return s;
-  }
-
-  // Throttle: +1 forward, -1 reverse/brake.
-  throttleAxis() {
-    let t = 0;
-    if (this.held('KeyW') || this.held('ArrowUp')) t += 1;
-    if (this.held('KeyS') || this.held('ArrowDown')) t -= 1;
-    return t;
-  }
-
-  // Call at the end of every frame: clears one-frame edges.
-  endFrame() {
-    this.pressed.clear();
-    this.mouseClicked = false;
-    this.dragX = 0;
-    this.dragY = 0;
-    this.touch.action = false;
-  }
+  // Driving helpers the game reads each frame.
+  state.forward = function forward() {
+    return (keys['w'] || keys['arrowup'] ? 1 : 0) - (keys['s'] || keys['arrowdown'] ? 1 : 0) - state.joyY;
+  };
+  state.steer = function steer() {
+    return (keys['a'] || keys['arrowleft'] ? 1 : 0) - (keys['d'] || keys['arrowright'] ? 1 : 0) + state.joyX;
+  };
+  state.handbrake = function handbrake() {
+    return keys[' '] === true;
+  };
+  // Clear the edge-triggered flags after the game has consumed them.
+  state.consume = function consume() {
+    state.pressedE = false;
+    state.pressedF = false;
+    state.pressedR = false;
+    state.pressedM = false;
+    state.pressedEsc = false;
+    state.clicked = false;
+    state.dragX = 0;
+    state.dragY = 0;
+  };
+  return state;
 }

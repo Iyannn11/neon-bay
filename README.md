@@ -4,8 +4,6 @@
 
 # Neon Bay — Make GTA 6 bounty entry
 
-Neon Bay — Make GTA 6 bounty entry
-
 An open-world crime game in the spirit of GTA 6, built from scratch in
 Three.js. You are Kai Reyes, a driver-for-hire in Neon Bay, a coastal city
 that never sleeps. Six jobs stand between you and the crown of the city.
@@ -30,8 +28,8 @@ heat. Finish the chain and Neon Bay is yours.
 ## Systems
 
 - **Driving** — WASD/arrows, Space handbrake, E to enter and steal cars. Acceleration, braking, steering, collisions.
-- **Traffic** — 20 AI cars following the street grid in lanes, stopping at the lights; 35 pedestrians on the sidewalks who scatter and can be knocked down.
-- **Wanted 0–5** — stealing, speeding, hitting pedestrians and shooting raise the heat. Police cars chase and ram; at 4+ stars a helicopter with a searchlight joins and roadblocks appear. Get busted on foot at 3+ stars and it is over.
+- **Traffic** — 20 AI cars following the street grid in lanes, stopping for the car ahead; 35 pedestrians on the sidewalks who scatter and can be knocked down.
+- **Wanted 0–5** — stealing, speeding, hitting pedestrians and shooting raise the heat. Police cars chase and ram; at 4+ stars a helicopter with a searchlight joins and roadblocks appear. Get busted on foot at 2+ stars and it is over.
 - **Combat** — punch (F), pistol (mouse click, R reload). Police return fire at high wanted.
 - **HUD** — health, cash, wanted stars, speed, clock, mission panel, a 2D minimap (player, traffic, police, mission marker) and an objective arrow.
 - **Screens** — title, pause (Esc/P), game over (busted/wasted) with restart. Progress saves to localStorage (cash, missions done, best cash).

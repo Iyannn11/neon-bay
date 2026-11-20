@@ -1,39 +1,33 @@
-// save.js — Neon Bay's save file. One key in localStorage, plain JSON:
-// cash, the missions finished, the best (highest) cash ever held and the total
-// time played. Nothing else leaves the browser.
+// Neon Bay save: a small JSON record in localStorage.
+// Cash, missions completed, best cash. Nothing sensitive, nothing else.
 
 const KEY = 'neon-bay-save-v1';
 
-export function blankSave() {
-  return {
-    cash: 0,
-    missionsDone: [],
-    bestCash: 0,
-    secondsPlayed: 0,
-    savedAt: 0,
-  };
-}
-
 export function loadSave() {
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return blankSave();
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return { cash: 0, missionsDone: 0, bestCash: 0, muted: false };
     const data = JSON.parse(raw);
-    const save = blankSave();
-    if (typeof data.cash === 'number') save.cash = data.cash;
-    if (Array.isArray(data.missionsDone)) save.missionsDone = data.missionsDone;
-    if (typeof data.bestCash === 'number') save.bestCash = data.bestCash;
-    if (typeof data.secondsPlayed === 'number') save.secondsPlayed = data.secondsPlayed;
-    return save;
+    return {
+      cash: typeof data.cash === 'number' ? data.cash : 0,
+      missionsDone: typeof data.missionsDone === 'number' ? data.missionsDone : 0,
+      bestCash: typeof data.bestCash === 'number' ? data.bestCash : 0,
+      muted: data.muted === true,
+    };
   } catch (err) {
-    return blankSave();
+    return { cash: 0, missionsDone: 0, bestCash: 0, muted: false };
   }
 }
 
-export function writeSave(save) {
+export function saveGame(state) {
   try {
-    const copy = { ...save, savedAt: Date.now() };
-    window.localStorage.setItem(KEY, JSON.stringify(copy));
+    const data = {
+      cash: state.cash,
+      missionsDone: state.missionsDone,
+      bestCash: Math.max(state.bestCash || 0, state.cash),
+      muted: state.muted === true,
+    };
+    localStorage.setItem(KEY, JSON.stringify(data));
     return true;
   } catch (err) {
     return false;
@@ -42,8 +36,8 @@ export function writeSave(save) {
 
 export function clearSave() {
   try {
-    window.localStorage.removeItem(KEY);
+    localStorage.removeItem(KEY);
   } catch (err) {
-    // Storage may be unavailable; the game still plays.
+    // Storage may be unavailable in a sandbox; the game plays on regardless.
   }
 }

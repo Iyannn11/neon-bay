@@ -1,142 +1,160 @@
-// combat.js — fists and the pistol. Punching is a short-range swing with a
-// cooldown; the pistol fires a ray from the camera, costs one round, and
-// reloads with R. Police return fire when the wanted level is high, and
-// every shot can raise the heat.
+// Neon Bay combat: punch (F), pistol (mouse click, R reload), police return
+// fire at high wanted. Shots are hitscan with a short tracer flash.
 
-import * as THREE from 'three';
-import { PLAYER } from './config.js';
+import * as THREE from '../vendor/three.module.min.js';
+import { TUNING } from './config.js';
 
-export class CombatSystem {
-  constructor(scene, audio) {
-    this.scene = scene;
-    this.audio = audio;
-    this.ammo = PLAYER.pistolMag;
-    this.reloading = false;
-    this.reloadTimer = 0;
-    this.punchCooldown = 0;
-    this.tracer = null;
-    this.tracerTimer = 0;
-    this._buildTracer();
+export function createCombat(scene, game) {
+  let ammo = TUNING.pistolAmmo;
+  let reloadTimer = 0;
+  let punchCooldown = 0;
+  let tracer = null;
+  let tracerTimer = 0;
+
+  const tracerMat = new THREE.MeshBasicMaterial({
+    color: 0xffe9a0,
+    transparent: true,
+    opacity: 0.9,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+
+  function showTracer(from, to) {
+    if (tracer) scene.remove(tracer);
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const len = dir.length();
+    tracer = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 6), tracerMat);
+    tracer.position.copy(from).addScaledVector(dir, 0.5);
+    tracer.lookAt(to);
+    tracer.rotateX(Math.PI / 2);
+    scene.add(tracer);
+    tracerTimer = 0.09;
   }
 
-  _buildTracer() {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0], 3));
-    this.tracer = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0 }));
-    this.scene.add(this.tracer);
+  function punch() {
+    if (punchCooldown > 0) return;
+    punchCooldown = 0.45;
+    if (game.audio) game.audio.punch();
+    const p = game.player;
+    // Hit the nearest pedestrian in front, or a cop car at close range.
+    let best = null;
+    let bestD = 2.4;
+    for (const w of game.pedestrians.walkers) {
+      if (w.down) continue;
+      const d = Math.hypot(w.x - p.pos.x, w.z - p.pos.z);
+      if (d < bestD) {
+        bestD = d;
+        best = w;
+      }
+    }
+    if (best) {
+      best.down = true;
+      best.downTimer = 4;
+      game.addWanted(0.4);
+      game.hud.flash('Pedestrian down — the heat notices');
+    }
   }
 
-  // A punch: hits the nearest pedestrian or cop within range in front.
-  punch(playerPos, playerHeading, peds, police) {
-    if (this.punchCooldown > 0) return false;
-    this.punchCooldown = 0.45;
-    if (this.audio) this.audio.thud();
-    const fx = Math.sin(playerHeading);
-    const fz = Math.cos(playerHeading);
-    // Pedestrians first.
-    const ped = peds.nearest(
-      playerPos.x + fx * PLAYER.punchRange * 0.5,
-      playerPos.z + fz * PLAYER.punchRange * 0.5,
-      PLAYER.punchRange,
+  function shoot(screenX, screenY) {
+    if (reloadTimer > 0 || ammo <= 0) {
+      if (ammo <= 0) reload();
+      return;
+    }
+    ammo -= 1;
+    if (game.audio) game.audio.gunshot();
+    const p = game.player;
+    // Aim from the camera through the click point.
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2(
+      (screenX / window.innerWidth) * 2 - 1,
+      -(screenY / window.innerHeight) * 2 + 1,
     );
-    if (ped) {
-      peds.knockDown(ped);
-      return true;
-    }
-    // Then cops.
-    for (const car of police.cars) {
-      const d = Math.hypot(car.x - playerPos.x, car.z - playerPos.z);
-      if (d < PLAYER.punchRange + 2) {
-        car.speed = 0;
-        return true;
+    ray.setFromCamera(ndc, game.camera);
+    const origin = ray.ray.origin.clone();
+    const dir = ray.ray.direction.clone();
+    const end = origin.clone().addScaledVector(dir, 60);
+    showTracer(origin, end);
+    // Hit a police car within a cone of the ray.
+    let hit = false;
+    for (const car of game.police.cars) {
+      const toCar = new THREE.Vector3(car.x - origin.x, 0.5 - origin.y, car.z - origin.z);
+      const dist = toCar.length();
+      if (dist < 55) {
+        const along = toCar.dot(dir);
+        const perp = Math.sqrt(Math.max(0, dist * dist - along * along));
+        if (along > 0 && perp < 3.2) {
+          hit = true;
+          game.addWanted(0.7);
+          game.hud.flash('Hit a police car!');
+          break;
+        }
       }
     }
-    return false;
+    if (!hit) {
+      // Wild shot still draws heat.
+      game.addWanted(0.15);
+    }
+    if (ammo === 0) reload();
   }
 
-  // Fire the pistol from `origin` along `direction`. Returns what was hit.
-  shoot(origin, direction, peds, police) {
-    if (this.reloading) return null;
-    if (this.ammo <= 0) {
-      this.startReload();
-      return null;
-    }
-    this.ammo -= 1;
-    if (this.audio) this.audio.gunshot();
-    const ray = new THREE.Raycaster(origin, direction, 0.1, PLAYER.pistolRange);
-    // Pedestrians: test against their torso spheres by distance to the ray.
-    let hit = null;
-    let bestT = PLAYER.pistolRange;
-    for (const ped of peds.peds) {
-      if (ped.down) continue;
-      const toPed = new THREE.Vector3(ped.x - origin.x, 1.1 - origin.y, ped.z - origin.z);
-      const t = toPed.dot(direction);
-      if (t < 0 || t > bestT) continue;
-      const closest = new THREE.Vector3().copy(direction).multiplyScalar(t).add(origin);
-      const dist = closest.distanceTo(new THREE.Vector3(ped.x, 1.1, ped.z));
-      if (dist < 0.9) {
-        hit = { type: 'ped', ped, t };
-        bestT = t;
+  function reload() {
+    if (reloadTimer > 0 || ammo === TUNING.pistolAmmo) return;
+    reloadTimer = 1.4;
+    game.hud.flash('Reloading…');
+  }
+
+  function update(dt) {
+    punchCooldown = Math.max(0, punchCooldown - dt);
+    if (reloadTimer > 0) {
+      reloadTimer -= dt;
+      if (reloadTimer <= 0) {
+        ammo = TUNING.pistolAmmo;
+        game.hud.flash('Pistol reloaded');
       }
     }
-    for (const car of police.cars) {
-      const toCar = new THREE.Vector3(car.x - origin.x, 0.8 - origin.y, car.z - origin.z);
-      const t = toCar.dot(direction);
-      if (t < 0 || t > bestT) continue;
-      const closest = new THREE.Vector3().copy(direction).multiplyScalar(t).add(origin);
-      const dist = closest.distanceTo(new THREE.Vector3(car.x, 0.8, car.z));
-      if (dist < 2.2) {
-        hit = { type: 'cop', car, t };
-        bestT = t;
+    if (tracer) {
+      tracerTimer -= dt;
+      if (tracerTimer <= 0) {
+        scene.remove(tracer);
+        tracer = null;
       }
     }
-    const end = new THREE.Vector3().copy(direction).multiplyScalar(bestT).add(origin);
-    this._showTracer(origin, end);
-    if (hit && hit.type === 'ped') peds.knockDown(hit.ped);
-    if (hit && hit.type === 'cop') hit.car.speed = 0;
-    return hit;
-  }
-
-  _showTracer(from, to) {
-    const pos = this.tracer.geometry.getAttribute('position');
-    pos.setXYZ(0, from.x, from.y, from.z);
-    pos.setXYZ(1, to.x, to.y, to.z);
-    pos.needsUpdate = true;
-    this.tracer.material.opacity = 0.9;
-    this.tracerTimer = 0.08;
-  }
-
-  startReload() {
-    if (this.reloading || this.ammo === PLAYER.pistolMag) return;
-    this.reloading = true;
-    this.reloadTimer = 1.1;
-  }
-
-  // Police return fire: at 3+ stars a nearby cop occasionally shoots.
-  policeFire(dt, playerPos, police, onDamage) {
-    if (police.wanted < 3) return;
-    for (const car of police.cars) {
-      const d = Math.hypot(car.x - playerPos.x, car.z - playerPos.z);
-      if (d > 26) continue;
-      if (Math.random() < dt * 0.5) {
-        if (this.audio) this.audio.gunshot();
-        if (d < 18 && Math.random() < 0.45) onDamage(6);
+    // Police return fire at 3+ stars: chips the player's health.
+    if (game.wanted >= 3 && game.police.cars.length > 0) {
+      game.fireClock = (game.fireClock || 0) - dt;
+      if (game.fireClock <= 0) {
+        game.fireClock = 1.6;
+        const p = game.player;
+        const nearest = game.police.cars.reduce((a, b) => {
+          const da = Math.hypot(a.x - p.pos.x, a.z - p.pos.z);
+          const db = Math.hypot(b.x - p.pos.x, b.z - p.pos.z);
+          return da < db ? a : b;
+        });
+        const d = Math.hypot(nearest.x - p.pos.x, nearest.z - p.pos.z);
+        if (d < 26) {
+          p.health -= 6;
+          showTracer(
+            new THREE.Vector3(nearest.x, 1.2, nearest.z),
+            new THREE.Vector3(p.pos.x, p.inCar ? 1.0 : 1.4, p.pos.z),
+          );
+          if (game.audio) game.audio.gunshot();
+          game.hud.flash('Taking fire!');
+          if (p.health <= 0) game.wasted();
+        }
       }
     }
   }
 
-  update(dt) {
-    if (this.punchCooldown > 0) this.punchCooldown -= dt;
-    if (this.reloading) {
-      this.reloadTimer -= dt;
-      if (this.reloadTimer <= 0) {
-        this.reloading = false;
-        this.ammo = PLAYER.pistolMag;
-      }
-    }
-    if (this.tracerTimer > 0) {
-      this.tracerTimer -= dt;
-      if (this.tracerTimer <= 0) this.tracer.material.opacity = 0;
-    }
-  }
+  return {
+    punch,
+    shoot,
+    reload,
+    update,
+    get ammo() {
+      return ammo;
+    },
+    get reloading() {
+      return reloadTimer > 0;
+    },
+  };
 }

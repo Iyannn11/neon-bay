@@ -2,106 +2,97 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <link rel="icon" href="data:,">
-<title>Neon Bay — an open-world crime game</title>
+<title>Neon Bay — Make GTA 6</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1026; font-family: 'Segoe UI', Arial, sans-serif; }
-  #game { display: block; width: 100vw; height: 100vh; }
-  .hidden { display: none !important; }
-
-  /* --- HUD --- */
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; color: #fff; }
-  #topLeft { position: absolute; top: 14px; left: 16px; }
-  #healthBar { width: 220px; height: 14px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35); border-radius: 7px; overflow: hidden; }
-  #healthFill { height: 100%; width: 100%; background: #39d353; transition: width 0.2s; }
-  #healthText { font-size: 12px; margin-top: 3px; color: #d8ffd8; text-shadow: 0 1px 2px #000; }
-  #cashText { font-size: 26px; font-weight: 800; color: #7dff9a; text-shadow: 0 2px 4px #000; margin-top: 6px; }
-  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23c; text-shadow: 0 0 10px rgba(255,210,60,0.7), 0 2px 3px #000; margin-top: 2px; }
-  #stars.hot { color: #ff3b30; text-shadow: 0 0 12px rgba(255,59,48,0.9), 0 2px 3px #000; animation: blink 0.7s steps(2) infinite; }
-  @keyframes blink { 50% { opacity: 0.55; } }
-  #wantedLabel { font-size: 12px; letter-spacing: 2px; color: #ffb020; text-shadow: 0 1px 2px #000; }
-  #topRight { position: absolute; top: 14px; right: 16px; text-align: right; text-shadow: 0 2px 4px #000; }
-  #clockText { font-size: 26px; font-weight: 700; }
-  #speedText { font-size: 20px; font-weight: 600; color: #bfe8ff; }
-  #ammoText { font-size: 14px; color: #ffd27a; margin-top: 2px; }
-  #minimapWrap { position: absolute; right: 16px; bottom: 16px; border: 2px solid rgba(255,255,255,0.4); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.6); background: #0d1428; }
-  #minimap { display: block; width: 170px; height: 170px; }
-  #missionPanel { position: absolute; left: 16px; bottom: 16px; max-width: 340px; background: rgba(5,10,25,0.72); border-left: 4px solid #ffc233; border-radius: 6px; padding: 10px 14px; }
-  #missionName { font-size: 17px; font-weight: 800; color: #ffc233; letter-spacing: 0.5px; }
-  #missionStep { font-size: 14px; color: #e8f0ff; margin-top: 3px; }
-  #missionReward { font-size: 12px; color: #7dff9a; margin-top: 3px; }
-  #objectiveArrow { position: absolute; left: 50%; top: 58%; width: 0; height: 0; margin-left: -14px; border-left: 14px solid transparent; border-right: 14px solid transparent; border-bottom: 22px solid #ffc233; filter: drop-shadow(0 0 6px rgba(255,194,51,0.9)); display: none; }
-  #banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%) scale(0.9); text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s; }
-  #banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
-  .banner-title { font-size: 44px; font-weight: 900; letter-spacing: 3px; color: #fff; text-shadow: 0 0 24px rgba(0,229,255,0.9), 0 3px 6px #000; }
-  .banner-sub { font-size: 18px; color: #ffd27a; text-shadow: 0 2px 4px #000; margin-top: 4px; }
-  #toast { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: rgba(5,10,25,0.8); border: 1px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 8px 18px; font-size: 15px; opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #070a18; font-family: Arial, Helvetica, sans-serif; color: #f2f2f2; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .hud { position: fixed; z-index: 5; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+  #top-right { top: 14px; right: 14px; text-align: right; }
+  #cash-text { font-size: 26px; font-weight: bold; color: #7dff9e; }
+  #clock-text { font-size: 15px; color: #cfd4de; margin-top: 2px; }
+  #stars { font-size: 24px; color: #ffd23f; letter-spacing: 2px; margin-top: 2px; }
+  #stars.hot { color: #ff4444; animation: pulse 0.7s infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
+  #bottom-left { left: 14px; bottom: 14px; width: 240px; }
+  #health-bar { width: 100%; height: 12px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35); border-radius: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #39ff88, #7dff9e); transition: width 0.2s; }
+  #health-fill.low { background: linear-gradient(90deg, #ff4444, #ff7a1a); }
+  #health-text { font-size: 13px; margin-top: 3px; color: #e8ecf2; }
+  #speed-text { font-size: 22px; font-weight: bold; margin-top: 6px; }
+  #ammo-text { font-size: 13px; color: #cfd4de; margin-top: 2px; }
+  #mission-panel { position: fixed; left: 14px; top: 14px; z-index: 5; pointer-events: none; background: rgba(8,10,20,0.62); border-left: 4px solid #00e5ff; padding: 10px 14px; border-radius: 4px; max-width: 320px; }
+  #mission-name { font-size: 17px; font-weight: bold; color: #00e5ff; letter-spacing: 0.5px; }
+  #mission-text { font-size: 14px; color: #e8ecf2; margin-top: 3px; line-height: 1.35; }
+  #minimap { position: fixed; right: 14px; bottom: 14px; z-index: 5; width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.35); border-radius: 8px; background: rgba(10,14,24,0.85); }
+  #objective-arrow { position: fixed; left: 50%; top: 58%; z-index: 5; font-size: 22px; color: #ffd23f; pointer-events: none; opacity: 0; text-shadow: 0 0 8px rgba(255,210,63,0.9); transform: translate(-50%,-50%); }
+  #banner { position: fixed; left: 50%; top: 20%; transform: translate(-50%,-50%) scale(0.9); z-index: 6; text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; }
+  #banner.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  #banner-title { font-size: 44px; font-weight: bold; letter-spacing: 3px; color: #00e5ff; text-shadow: 0 0 18px rgba(0,229,255,0.8), 0 2px 6px rgba(0,0,0,0.9); }
+  #banner-sub { font-size: 18px; color: #f2f2f2; margin-top: 6px; text-shadow: 0 2px 6px rgba(0,0,0,0.9); }
+  #toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 6; background: rgba(8,10,20,0.8); border: 1px solid rgba(0,229,255,0.5); padding: 8px 16px; border-radius: 20px; font-size: 15px; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
   #toast.show { opacity: 1; }
-  #controls { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); font-size: 11px; color: rgba(255,255,255,0.55); text-shadow: 0 1px 2px #000; }
-
-  /* --- Screens --- */
-  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(160deg, rgba(8,10,30,0.88), rgba(40,8,50,0.82)); color: #fff; text-align: center; }
-  .screen h1 { font-size: 64px; font-weight: 900; letter-spacing: 6px; background: linear-gradient(90deg, #00e5ff, #ff2e88, #ffc233); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 40px rgba(255,46,136,0.35); }
-  .screen h2 { font-size: 18px; font-weight: 400; color: #bfe8ff; margin-top: 6px; }
-  .screen p { max-width: 560px; margin: 18px 0 6px; color: #d8e2f2; line-height: 1.6; font-size: 15px; }
-  .screen button { pointer-events: auto; margin-top: 22px; padding: 14px 42px; font-size: 19px; font-weight: 800; letter-spacing: 2px; color: #081018; background: linear-gradient(90deg, #00e5ff, #39ff88); border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 6px 24px rgba(0,229,255,0.45); }
-  .screen button:hover { transform: translateY(-1px); }
-  .screen .keys { margin-top: 20px; font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.9; }
-  #gameOverTitle { font-size: 72px; color: #ff3b30; -webkit-text-fill-color: #ff3b30; }
+  .overlay { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; flex-direction: column; background: linear-gradient(160deg, rgba(7,10,24,0.88), rgba(20,8,32,0.88)); text-align: center; padding: 20px; }
+  .overlay.show { display: flex; }
+  .overlay h1 { font-size: 64px; letter-spacing: 6px; color: #00e5ff; text-shadow: 0 0 24px rgba(0,229,255,0.9), 0 0 60px rgba(255,46,166,0.6); }
+  .overlay h1 .pink { color: #ff2ea6; text-shadow: 0 0 24px rgba(255,46,166,0.9); }
+  .overlay p { font-size: 17px; color: #dfe4ec; max-width: 560px; line-height: 1.55; margin-top: 14px; }
+  .overlay .keys { font-size: 14px; color: #9aa0ad; margin-top: 12px; line-height: 1.7; }
+  .overlay button { pointer-events: auto; margin-top: 26px; font-size: 20px; font-weight: bold; letter-spacing: 1px; color: #071018; background: linear-gradient(90deg, #00e5ff, #39ff88); border: none; border-radius: 8px; padding: 14px 42px; cursor: pointer; box-shadow: 0 0 24px rgba(0,229,255,0.5); }
+  .overlay button:hover { filter: brightness(1.15); }
+  .overlay button.ghost { background: transparent; color: #cfd4de; border: 1px solid rgba(255,255,255,0.4); box-shadow: none; font-size: 16px; padding: 10px 28px; margin-top: 12px; }
+  #gameover-title { color: #ff4444; text-shadow: 0 0 24px rgba(255,68,68,0.9); }
+  #mute-button { position: fixed; right: 14px; bottom: 204px; z-index: 7; background: rgba(8,10,20,0.7); color: #e8ecf2; border: 1px solid rgba(255,255,255,0.35); border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
 </style>
-<script type="importmap">
-{ "imports": { "three": "./vendor/three.module.min.js" } }
-</script>
 </head>
 <body>
-<canvas id="game"></canvas>
+<canvas id="game-canvas"></canvas>
 
-<div id="hud">
-  <div id="topLeft">
-    <div id="healthBar"><div id="healthFill"></div></div>
-    <div id="healthText">100</div>
-    <div id="cashText">$0</div>
-    <div id="stars">☆☆☆☆☆</div>
-    <div id="wantedLabel">CLEAN</div>
-  </div>
-  <div id="topRight">
-    <div id="clockText">21:00</div>
-    <div id="speedText">0 km/h</div>
-    <div id="ammoText">AMMO 12/12</div>
-  </div>
-  <div id="minimapWrap"><canvas id="minimap" width="170" height="170"></canvas></div>
-  <div id="missionPanel">
-    <div id="missionName">First Light</div>
-    <div id="missionStep">Drive to the docks</div>
-    <div id="missionReward">Reward $500</div>
-  </div>
-  <div id="objectiveArrow"></div>
-  <div id="banner"></div>
-  <div id="toast"></div>
-  <div id="controls">WASD drive / walk &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; E enter / steal / interact &nbsp;·&nbsp; F punch &nbsp;·&nbsp; Click shoot &nbsp;·&nbsp; R reload &nbsp;·&nbsp; M mute &nbsp;·&nbsp; Esc pause</div>
+<div id="mission-panel" class="hud">
+  <div id="mission-name">Neon Bay</div>
+  <div id="mission-text">Press Start and meet Marlowe.</div>
 </div>
 
-<div id="titleScreen" class="screen">
-  <h1>NEON BAY</h1>
-  <h2>An open-world crime game — a coastal city that never sleeps.</h2>
-  <p>You are Kai Reyes. Six jobs stand between you and the crown of Neon Bay: a package at the docks, a stolen Comet GT, a courier to tail, a three-star escape, the Coral Bank vault — and the King of the Bay finale. Drive, steal, fight, and stay ahead of the police.</p>
-  <button id="startBtn">START ENGINE</button>
-  <button id="continueBtn" style="background:linear-gradient(90deg,#ffc233,#ff7a3c);box-shadow:0 6px 24px rgba(255,194,51,0.4);">New Game</button>
-  <div class="keys">WASD / arrows — drive &amp; walk &nbsp;·&nbsp; Space — handbrake &nbsp;·&nbsp; E — enter / steal / interact<br>F — punch &nbsp;·&nbsp; Mouse click — shoot &nbsp;·&nbsp; R — reload &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; Esc — pause</div>
+<div id="top-right" class="hud">
+  <div id="cash-text">$0</div>
+  <div id="clock-text">18:00</div>
+  <div id="stars">☆☆☆☆☆</div>
 </div>
 
-<div id="pauseScreen" class="screen hidden">
+<div id="bottom-left" class="hud">
+  <div id="health-bar"><div id="health-fill"></div></div>
+  <div id="health-text">100</div>
+  <div id="speed-text">0 km/h</div>
+  <div id="ammo-text"></div>
+</div>
+
+<canvas id="minimap" width="180" height="180"></canvas>
+<div id="objective-arrow"><span id="arrow-glyph">▲</span> <span id="arrow-dist"></span></div>
+<button id="mute-button">🔊 Sound: on</button>
+
+<div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+<div id="toast"></div>
+
+<div id="title-screen" class="overlay">
+  <h1>NEON <span class="pink">BAY</span></h1>
+  <p>An open-world crime game in the spirit of GTA 6. You are Kai Reyes, a driver-for-hire in a coastal city that never sleeps. Six jobs stand between you and the crown of the city.</p>
+  <p class="keys">WASD / arrows — drive &amp; walk &nbsp;·&nbsp; Space — handbrake &nbsp;·&nbsp; E — enter / steal car, pick up<br>F — punch &nbsp;·&nbsp; Click — shoot &nbsp;·&nbsp; R — reload &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; Esc — pause</p>
+  <button id="start-button">START THE ENGINE</button>
+</div>
+
+<div id="pause-screen" class="overlay">
   <h1>PAUSED</h1>
-  <h2>Neon Bay waits for no one — except right now.</h2>
-  <button id="resumeBtn">RESUME</button>
+  <p>Neon Bay waits for no one — except right now.</p>
+  <button id="resume-button">RESUME</button>
+  <button id="restart-button" class="ghost">RESTART FROM THE HIDEOUT</button>
 </div>
 
-<div id="gameOverScreen" class="screen hidden">
-  <h1 id="gameOverTitle">WASTED</h1>
-  <h2 id="gameOverSub">You went down in the streets of Neon Bay.</h2>
-  <button id="restartBtn">TRY AGAIN</button>
+<div id="gameover-screen" class="overlay">
+  <h1 id="gameover-title">BUSTED</h1>
+  <p id="gameover-sub"></p>
+  <button id="retry-button">TRY AGAIN</button>
 </div>
 
 <script type="module" src="./src/main.js"></script>
