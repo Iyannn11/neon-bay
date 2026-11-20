@@ -199,9 +199,9 @@ function setNightFlag(flag) {
   G.isNight = flag;
   scene.background = new THREE.Color(flag ? COLOURS.skyNight : COLOURS.skyDay);
   scene.fog.color = new THREE.Color(flag ? 0x0b1026 : 0x9fc4e0);
-  sun.intensity = flag ? 0.65 : 2.4;
+  sun.intensity = flag ? 0.85 : 2.4;
   sun.color = new THREE.Color(flag ? COLOURS.sunNight : COLOURS.sunDay);
-  hemi.intensity = flag ? 0.5 : 0.9;
+  hemi.intensity = flag ? 0.62 : 0.9;
   city.setNight(flag);
 }
 

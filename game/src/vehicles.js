@@ -177,6 +177,16 @@ export function spawnTraffic(scene, rng, count, avoidPos) {
   for (let i = 0; i < count; i += 1) {
     const colour = pick(rng, COLOURS.carPalette);
     const mesh = createCarMesh(colour, false);
+    // A few cars are taxis: a small lit roof sign, so the traffic reads as
+    // varied instead of one repeated sedan.
+    if (rng() < 0.2) {
+      const signMat = new THREE.MeshStandardMaterial({
+        color: 0xf2c230, emissive: 0xcc9900, emissiveIntensity: 0.5, roughness: 0.6,
+      });
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.25, 0.45), signMat);
+      sign.position.set(0, 1.75, -0.3);
+      mesh.add(sign);
+    }
     const axis = rng() < 0.5 ? 'ns' : 'ew';
     const road = WORLD.roads[Math.floor(rng() * WORLD.roads.length)];
     const direction = rng() < 0.5 ? 1 : -1;

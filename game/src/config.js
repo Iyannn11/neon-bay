@@ -1,6 +1,6 @@
 // Neon Bay — shared tuning constants and world layout.
-// One source of truth for sizes, speeds, colours and mission rewards so
-// every system (city, cars, police, missions, HUD) agrees with the others.
+// One source of truth for sizes, speeds, colours and mission rewards, so
+// the city, cars, police, missions and HUD all agree with each other.
 
 export const WORLD = {
   // City blocks live inside [-210, 210] on x and z. The beach and ocean
@@ -27,7 +27,7 @@ export const COLOURS = {
   grass: 0x5d8a4a,
   buildingPalette: [0xcf8f6a, 0x7fa8c9, 0xc9b458, 0x8a7fb8, 0x6fb08a, 0xd98a8a, 0x9fb4c7, 0xe0a458],
   neonPalette: [0xff2e88, 0x00e5ff, 0xffd400, 0x7cff00, 0xff6a00, 0xb967ff],
-  carPalette: [0xd23b2e, 0x2e6fd2, 0xf2c230, 0xeeeeee, 0x222222, 0x2fae6e, 0x7a4fd0, 0xff7a1a],
+  carPalette: [0xd23b2e, 0x2e6fd2, 0xf2c230, 0xeeeeee, 0x222222, 0x2fae6e, 0x7a4fd0, 0xff7a1a, 0xff2e88, 0x00c8d8, 0x9dff00, 0xe040fb, 0x20c5ba, 0xff4d4d],
 };
 
 export const PLAYER = {

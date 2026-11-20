@@ -37,7 +37,7 @@ export function updateWanted(wanted, dt, time, nearestPoliceDistance) {
   }
 }
 
-function spawnPoliceCar(scene, playerPos, rng) {
+function spawnPoliceCar(scene, playerPos) {
   const mesh = createCarMesh(0x111111, true);
   // Spawn at a road near the city edge, on the player's side of town.
   const edge = Math.random() < 0.5 ? -1 : 1;
@@ -55,12 +55,60 @@ function spawnPoliceCar(scene, playerPos, rng) {
   return car;
 }
 
+// Police helicopter: a simple hovering mesh with a spinning rotor and a
+// searchlight cone. It only shows at 4+ stars, so the 5-star chase (and
+// the 4-star night finale) get a helicopter in the sky.
+function createHeliMesh() {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1a1d24, roughness: 0.5, metalness: 0.4 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 6), bodyMat);
+  group.add(body);
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x18242e, roughness: 0.15, metalness: 0.7 });
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.1, 2), glassMat);
+  glass.position.set(0, 0.4, 2.2);
+  group.add(glass);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 5), bodyMat);
+  tail.position.set(0, 0.3, -5);
+  group.add(tail);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2, 1.2), bodyMat);
+  fin.position.set(0, 1.2, -7);
+  group.add(fin);
+  const skidMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+  for (const sx of [-1.2, 1.2]) {
+    const skid = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 4.5), skidMat);
+    skid.position.set(sx, -1.2, 0.5);
+    group.add(skid);
+  }
+  const rotorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 });
+  const rotor = new THREE.Mesh(new THREE.BoxGeometry(11, 0.12, 0.6), rotorMat);
+  rotor.position.y = 1.4;
+  group.add(rotor);
+  const rotor2 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, 11), rotorMat);
+  rotor2.position.y = 1.4;
+  group.add(rotor2);
+  // Searchlight cone: apex at the heli, wide base on the ground.
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xfff6c9, transparent: true, opacity: 0.16,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(6, 20, 16, 1, true), beamMat);
+  beam.position.y = -10;
+  group.add(beam);
+  // Red beacon light under the tail.
+  const beaconMat = new THREE.MeshStandardMaterial({ color: 0xff2020, emissive: 0xff2020, emissiveIntensity: 2 });
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), beaconMat);
+  beacon.position.set(0, -1.1, -6.5);
+  group.add(beacon);
+  return { group, rotor, rotor2, beaconMat };
+}
+
 export function createPolice(scene) {
   return {
     scene,
     cars: [],
     wanted: createWanted(),
     sirenPhase: 0,
+    heli: null,
   };
 }
 
@@ -139,6 +187,25 @@ export function updatePolice(police, dt, time, player, colliders) {
     }
   }
   if (police.cars.length === 0) wanted.bustTimer = 0;
+  // Helicopter at 4+ stars: hover ahead of the player, rotor spinning,
+  // beacon flashing. Hidden below 4 stars.
+  if (wanted.stars >= 4) {
+    if (!police.heli) {
+      police.heli = createHeliMesh();
+      police.scene.add(police.heli.group);
+    }
+    const heli = police.heli;
+    heli.group.visible = true;
+    const fx = Math.sin(player.heading);
+    const fz = Math.cos(player.heading);
+    heli.group.position.set(player.pos.x + fx * 60 + 5, 20, player.pos.z + fz * 60);
+    heli.group.rotation.y = player.heading;
+    heli.rotor.rotation.y += dt * 18;
+    heli.rotor2.rotation.y += dt * 18;
+    heli.beaconMat.emissiveIntensity = Math.sin(time * 6) > 0 ? 2.5 : 0.3;
+  } else if (police.heli) {
+    police.heli.group.visible = false;
+  }
   updateWanted(wanted, dt, time, nearest);
   return null;
 }

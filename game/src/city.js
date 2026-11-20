@@ -120,11 +120,12 @@ export function createCity(scene, rng) {
   // Buildings: one to three per block, heights rise toward downtown (0, 0).
   const blockCentres = [-150, -90, -30, 30, 90, 150];
   const windowTextures = [
+    makeWindowTexture(rng, 0.5),
+    makeWindowTexture(rng, 0.7),
     makeWindowTexture(rng, 0.35),
-    makeWindowTexture(rng, 0.55),
-    makeWindowTexture(rng, 0.2),
+    makeWindowTexture(rng, 0.6),
   ];
-  const signWords = ['NEON', 'HOTEL', 'CASINO', 'PIZZA', 'TACOS', 'BAY', 'MOTEL', 'CLUB'];
+  const signWords = ['NEON', 'HOTEL', 'CASINO', 'PIZZA', 'TACOS', 'BAY', 'MOTEL', 'CLUB', 'VAPOR', 'DISCO', 'RAMEN', 'ARCADE', 'SUSHI', '24H', 'BAR', 'VICE', 'TURBO', 'LIVE'];
   for (const bx of blockCentres) {
     for (const bz of blockCentres) {
       if (bz > 180) continue;
@@ -155,18 +156,48 @@ export function createCity(scene, rng) {
         group.add(building);
         windowMeshes.push(sideMat);
         colliders.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
-        // Neon sign on taller downtown buildings.
-        if (h > 40 && rng() < 0.6) {
+        // Neon sign on taller downtown buildings (and mid-rises now, so
+        // the avenue reads as a neon strip, not a single sign).
+        if (h > 28 && rng() < 0.85) {
           const word = pick(rng, signWords);
           const neonColour = pick(rng, COLOURS.neonPalette);
           const cssColour = `#${neonColour.toString(16).padStart(6, '0')}`;
+          // A faint additive halo behind the sign, so the neon reads as
+          // glowing at night instead of a flat lit rectangle.
+          const halo = new THREE.Mesh(
+            new THREE.PlaneGeometry(23, 6.5),
+            new THREE.MeshBasicMaterial({
+              color: neonColour, transparent: true, opacity: 0.22,
+              blending: THREE.AdditiveBlending, depthWrite: false,
+            }),
+          );
+          halo.position.set(x, h * 0.82, z + d / 2 + 0.08);
+          group.add(halo);
           const sign = new THREE.Mesh(
-            new THREE.PlaneGeometry(16, 4),
+            new THREE.PlaneGeometry(20, 5),
             new THREE.MeshBasicMaterial({ map: makeSignTexture(word, cssColour), transparent: true }),
           );
           sign.position.set(x, h * 0.82, z + d / 2 + 0.15);
           group.add(sign);
           neonSigns.push(sign.material);
+        }
+        // Rooftop clutter on taller buildings, so the skyline is not a row
+        // of flat slabs: AC boxes on most, a water tower on the tallest.
+        if (h > 25 && rng() < 0.55) {
+          const ac = new THREE.Mesh(new THREE.BoxGeometry(3, 1.6, 3), roofMat);
+          ac.position.set(x + range(rng, -w / 4, w / 4), h + 0.3 + 0.8, z + range(rng, -d / 4, d / 4));
+          group.add(ac);
+        }
+        if (h > 55 && rng() < 0.4) {
+          const tankMat = new THREE.MeshStandardMaterial({ color: 0x8a6f4d, roughness: 0.9 });
+          const tank = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 4, 8), tankMat);
+          const tx = x + range(rng, -w / 4, w / 4);
+          const tz = z + range(rng, -d / 4, d / 4);
+          tank.position.set(tx, h + 0.3 + 2, tz);
+          group.add(tank);
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 1.5, 8), roofMat);
+          cone.position.set(tx, h + 0.3 + 4 + 0.75, tz);
+          group.add(cone);
         }
       }
     }
@@ -228,7 +259,7 @@ export function createCity(scene, rng) {
     return mesh;
   }
   // Hideout: small blue-roof house in the north-west suburbs.
-  const hideout = landmarkBox(-150, -150, 16, 7, 12, 0x4a7fb8, 'Hideout');
+  landmarkBox(-150, -150, 16, 7, 12, 0x4a7fb8, 'Hideout');
   const hideoutRoof = new THREE.Mesh(
     new THREE.ConeGeometry(11, 5, 4),
     new THREE.MeshStandardMaterial({ color: 0x2c4f7a, roughness: 0.9 }),
@@ -239,7 +270,7 @@ export function createCity(scene, rng) {
   // Garage: yellow workshop downtown-east.
   landmarkBox(150, -30, 20, 8, 14, 0xd8a920, 'Garage');
   // Coral Bank: tall marble tower downtown.
-  const bank = landmarkBox(30, 30, 24, 70, 24, 0xd8d2c0, 'CoralBank');
+  landmarkBox(30, 30, 24, 70, 24, 0xd8d2c0, 'CoralBank');
   const bankSign = new THREE.Mesh(
     new THREE.PlaneGeometry(18, 4),
     new THREE.MeshBasicMaterial({ map: makeSignTexture('CORAL BANK', '#ffd400'), transparent: true }),
@@ -293,10 +324,10 @@ export function createCity(scene, rng) {
       return phase === 1;
     },
     setNight(isNight) {
-      for (const mat of streetlights) mat.emissiveIntensity = isNight ? 2.4 : 0.15;
+      for (const mat of streetlights) mat.emissiveIntensity = isNight ? 3.4 : 0.15;
       for (const mat of windowMeshes) {
         mat.emissive = new THREE.Color(isNight ? 0xffb85c : 0x000000);
-        mat.emissiveIntensity = isNight ? 1.1 : 0;
+        mat.emissiveIntensity = isNight ? 1.7 : 0;
       }
     },
   };

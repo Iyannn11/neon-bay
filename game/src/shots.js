@@ -116,11 +116,20 @@ export function stageShot(name, G) {
     if (t[2]) placeTraffic(t[2], 3.5, -110, 0, 11, 'ns', 3.5, 1);
     if (t[3]) placeTraffic(t[3], -50, -56.5, Math.PI / 2, 11, 'ew', 3.5, 1);
     if (t[4]) placeTraffic(t[4], 50, -123.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
+    if (t[5]) placeTraffic(t[5], 3.5, -30, 0, 11, 'ns', 3.5, 1);
+    if (t[6]) placeTraffic(t[6], -3.5, -160, Math.PI, 11, 'ns', -3.5, -1);
+    if (t[7]) placeTraffic(t[7], -110, -56.5, Math.PI / 2, 11, 'ew', 3.5, 1);
+    if (t[8]) placeTraffic(t[8], 110, -123.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
+    if (t[9]) placeTraffic(t[9], 3.5, -190, 0, 11, 'ns', 3.5, 1);
     const p = G.peds;
     if (p[0]) placePed(p[0], 9, 0, Math.PI);
     if (p[1]) placePed(p[1], -9, -20, 0);
     if (p[2]) placePed(p[2], 9, -40, Math.PI);
     if (p[3]) placePed(p[3], -9, -60, 0);
+    if (p[4]) placePed(p[4], 9, -80, 0);
+    if (p[5]) placePed(p[5], -9, -100, Math.PI);
+    if (p[6]) placePed(p[6], 9, -120, 0);
+    if (p[7]) placePed(p[7], -9, 20, Math.PI);
     G.shotCameraDist = 10;
     G.shotCameraHeight = 4.5;
     G.shotAutopilot = { kind: 'drive', target: new THREE.Vector3(0, 0, -160) };
@@ -129,11 +138,12 @@ export function stageShot(name, G) {
   }
 
   if (name === 'mission') {
-    // Delivery run: player driving the package back to the hideout, with
-    // traffic on the route and pedestrians near the hideout.
-    G.missions.index = 0;
+    // Mission 6 finale staging: the King of the Bay run — player driving
+    // the package back to the hideout at night-side dusk, with traffic on
+    // the route and pedestrians near the hideout.
+    G.missions.index = 5;
     G.missions.active = true;
-    G.missions.stepIndex = 2;
+    G.missions.stepIndex = 1;
     G.missions.hasPackage = true;
     const playerCar = G.playerCar;
     placePlayerInCar(G, playerCar, -60, 170, Math.PI, 22);
@@ -143,11 +153,19 @@ export function stageShot(name, G) {
     if (t[2]) placeTraffic(t[2], -56.5, 60, 0, 11, 'ns', 3.5, 1);
     if (t[3]) placeTraffic(t[3], -100, 3.5, Math.PI / 2, 11, 'ew', 3.5, 1);
     if (t[4]) placeTraffic(t[4], -40, -63.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
+    if (t[5]) placeTraffic(t[5], -63.5, 140, Math.PI, 11, 'ns', -3.5, -1);
+    if (t[6]) placeTraffic(t[6], -56.5, 140, 0, 11, 'ns', 3.5, 1);
+    if (t[7]) placeTraffic(t[7], -160, 3.5, Math.PI / 2, 11, 'ew', 3.5, 1);
+    if (t[8]) placeTraffic(t[8], -20, -63.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
     const p = G.peds;
     if (p[0]) placePed(p[0], -141, -120, 0);
     if (p[1]) placePed(p[1], -159, -140, Math.PI);
     if (p[2]) placePed(p[2], -69, 100, 0);
     if (p[3]) placePed(p[3], -51, 40, Math.PI);
+    if (p[4]) placePed(p[4], -69, 60, 0);
+    if (p[5]) placePed(p[5], -51, 80, Math.PI);
+    if (p[6]) placePed(p[6], -141, -100, 0);
+    if (p[7]) placePed(p[7], -159, -120, Math.PI);
     G.shotCameraDist = 10.5;
     G.shotCameraHeight = 5;
     G.shotAutopilot = { kind: 'drive', target: new THREE.Vector3(-150, 0, -132) };
@@ -179,11 +197,19 @@ export function stageShot(name, G) {
     if (t[0]) placeTraffic(t[0], -3.5, 25, Math.PI, 11, 'ns', -3.5, -1);
     if (t[1]) placeTraffic(t[1], 3.5, 70, 0, 11, 'ns', 3.5, 1);
     if (t[2]) placeTraffic(t[2], -40, 63.5, Math.PI / 2, 11, 'ew', 3.5, 1);
+    if (t[3]) placeTraffic(t[3], -3.5, -10, Math.PI, 11, 'ns', -3.5, -1);
+    if (t[4]) placeTraffic(t[4], 3.5, 150, 0, 11, 'ns', 3.5, 1);
+    if (t[5]) placeTraffic(t[5], 100, 63.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
+    if (t[6]) placeTraffic(t[6], -3.5, -90, Math.PI, 11, 'ns', -3.5, -1);
     const p = G.peds;
     if (p[0]) placePed(p[0], 9, 80, Math.PI);
     if (p[1]) placePed(p[1], -9, 110, 0);
     if (p[2]) placePed(p[2], 9, 130, Math.PI);
     if (p[3]) placePed(p[3], -9, 60, 0);
+    if (p[4]) placePed(p[4], 9, 40, 0);
+    if (p[5]) placePed(p[5], -9, 140, Math.PI);
+    if (p[6]) placePed(p[6], 9, 160, 0);
+    if (p[7]) placePed(p[7], -9, 20, Math.PI);
     G.shotCameraDist = 7.5;
     G.shotCameraHeight = 3.2;
     G.shotAutopilot = null;
@@ -202,11 +228,19 @@ export function stageShot(name, G) {
   if (t[0]) placeTraffic(t[0], -3.5, 10, Math.PI, 11, 'ns', -3.5, -1);
   if (t[1]) placeTraffic(t[1], 3.5, 25, 0, 11, 'ns', 3.5, 1);
   if (t[2]) placeTraffic(t[2], -40, 3.5, Math.PI / 2, 11, 'ew', 3.5, 1);
+  if (t[3]) placeTraffic(t[3], -3.5, -30, Math.PI, 11, 'ns', -3.5, -1);
+  if (t[4]) placeTraffic(t[4], 3.5, -20, 0, 11, 'ns', 3.5, 1);
+  if (t[5]) placeTraffic(t[5], 80, -3.5, -Math.PI / 2, 11, 'ew', -3.5, -1);
+  if (t[6]) placeTraffic(t[6], -3.5, -60, Math.PI, 11, 'ns', -3.5, -1);
   const p = G.peds;
   if (p[0]) placePed(p[0], 9, 30, Math.PI);
   if (p[1]) placePed(p[1], -9, 55, 0);
   if (p[2]) placePed(p[2], 9, 70, Math.PI);
   if (p[3]) placePed(p[3], -9, 20, 0);
+  if (p[4]) placePed(p[4], 9, 90, 0);
+  if (p[5]) placePed(p[5], -9, 100, Math.PI);
+  if (p[6]) placePed(p[6], 9, 10, 0);
+  if (p[7]) placePed(p[7], -9, -10, Math.PI);
   G.shotCameraDist = 7.5;
   G.shotCameraHeight = 3.2;
   G.shotAutopilot = null;

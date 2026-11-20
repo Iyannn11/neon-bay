@@ -2,7 +2,6 @@
 // Hitscan pistol: a shot hits the nearest ped or cop inside a narrow cone
 // in front of the camera. Police shoot back when the wanted level is 2+.
 
-import * as THREE from 'three';
 import { PLAYER } from './config.js';
 
 export function createCombat() {
