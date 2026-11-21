@@ -1,163 +1,132 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Neon Bay — Make GTA 6</title>
+<title>Neon Bay — an open-world crime game</title>
 <style>
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #050914; font-family: Arial, Helvetica, sans-serif; }
-  #app { position: fixed; inset: 0; }
-  canvas { display: block; }
-  .hud { position: absolute; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); user-select: none; pointer-events: none; z-index: 5; }
-  #hud-top-left { top: 12px; left: 14px; font-size: 15px; line-height: 1.5; }
-  #hud-top-right { top: 12px; right: 14px; text-align: right; font-size: 15px; line-height: 1.5; }
-  .bar { width: 170px; height: 10px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.5); border-radius: 5px; overflow: hidden; margin: 2px 0 6px 0; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0e1e; font-family: Arial, Helvetica, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .panel { position: fixed; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; z-index: 5; }
+  #hud-tl { top: 12px; left: 14px; }
+  #hud-tl .name { font-weight: bold; font-size: 15px; letter-spacing: 1px; }
+  .bar { width: 170px; height: 10px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); border-radius: 5px; margin: 4px 0; overflow: hidden; }
   .bar > div { height: 100%; }
-  #health-fill { background: linear-gradient(90deg, #2ee66b, #7dff9e); width: 100%; }
-  #armor-fill { background: linear-gradient(90deg, #2d9bff, #7dd7ff); width: 0%; }
-  #wanted { color: #ffd23e; font-size: 20px; letter-spacing: 2px; }
-  #money { color: #7dff9e; font-weight: bold; font-size: 18px; }
-  #weapon { font-size: 14px; color: #ffe9a8; }
-  #mission-box { top: 138px; left: 14px; max-width: 320px; background: rgba(5,10,25,0.62); border-left: 4px solid #ff2d78; padding: 8px 10px; border-radius: 4px; font-size: 14px; line-height: 1.45; }
-  #mission-box b { color: #ff8fb8; }
-  #hint { bottom: 92px; left: 50%; transform: translateX(-50%); font-size: 14px; background: rgba(0,0,0,0.55); padding: 6px 12px; border-radius: 16px; white-space: nowrap; }
-  #interact { bottom: 170px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; letter-spacing: 1px; background: rgba(255,45,120,0.85); border: 2px solid #ff8fb8; padding: 10px 22px; border-radius: 12px; box-shadow: 0 0 26px rgba(255,45,120,0.7); display: none; white-space: nowrap; }
-  #interact b { color: #ffe45c; }
-  #crosshair { left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 22px; color: rgba(255,255,255,0.9); display: none; }
-  #minimap { position: absolute; right: 14px; bottom: 14px; width: 168px; height: 168px; border: 2px solid rgba(255,255,255,0.55); border-radius: 8px; background: rgba(5,10,25,0.8); z-index: 5; }
-  #speed { right: 14px; bottom: 192px; font-size: 15px; text-align: right; }
-  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; z-index: 10; background: radial-gradient(ellipse at 50% 30%, rgba(255,45,120,0.25), rgba(5,9,20,0.88) 70%); }
-  .screen h1 { font-size: 56px; margin: 0 0 4px 0; letter-spacing: 4px; color: #ff2d78; text-shadow: 0 0 24px rgba(255,45,120,0.8), 0 2px 0 #000; }
-  .screen h2 { font-size: 20px; margin: 0 0 18px 0; color: #7dd7ff; letter-spacing: 6px; font-weight: normal; }
-  .screen p { max-width: 520px; font-size: 15px; line-height: 1.6; color: #dfe8ff; margin: 6px 0; }
-  .screen button { pointer-events: auto; cursor: pointer; margin-top: 16px; padding: 13px 34px; font-size: 18px; font-weight: bold; letter-spacing: 2px; color: #fff; background: linear-gradient(180deg, #ff2d78, #c40e56); border: 2px solid #ff8fb8; border-radius: 8px; box-shadow: 0 0 22px rgba(255,45,120,0.6); }
-  .screen button:hover { filter: brightness(1.15); }
-  .screen .keys { font-size: 13px; color: #9fb2d8; margin-top: 18px; line-height: 1.7; }
-  #pause-screen, #over-screen, #settings-screen, #shop-screen, #wardrobe-screen, #dialog-screen { display: none; background: rgba(5,9,20,0.82); }
-  #dialog-screen { justify-content: flex-end; padding-bottom: 120px; }
-  #dialog-box { background: rgba(5,10,25,0.9); border: 1px solid #7dd7ff; border-radius: 8px; padding: 14px 18px; max-width: 560px; font-size: 16px; line-height: 1.5; }
-  #dialog-box b { color: #7dd7ff; }
-  .panel { background: rgba(5,10,25,0.92); border: 1px solid #ff2d78; border-radius: 10px; padding: 20px 26px; max-width: 520px; text-align: left; }
-  .panel h3 { margin: 0 0 10px 0; color: #ff8fb8; letter-spacing: 2px; }
-  .panel .row { display: flex; justify-content: space-between; gap: 18px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 15px; }
-  .panel button { pointer-events: auto; cursor: pointer; padding: 6px 14px; font-size: 14px; color: #fff; background: #1c6dd9; border: 1px solid #7dd7ff; border-radius: 6px; }
-  .panel button:disabled { opacity: 0.4; cursor: default; }
-  .panel label { display: block; margin: 10px 0; font-size: 15px; }
-  .panel input[type=range] { width: 220px; vertical-align: middle; }
-  #toast { bottom: 140px; left: 50%; transform: translateX(-50%); font-size: 16px; color: #7dff9e; background: rgba(0,0,0,0.6); padding: 7px 14px; border-radius: 16px; opacity: 0; transition: opacity 0.3s; }
-  #touch-ui { display: none; position: absolute; inset: 0; z-index: 6; pointer-events: none; }
-  #stick { position: absolute; left: 22px; bottom: 22px; width: 118px; height: 118px; border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; background: rgba(255,255,255,0.08); pointer-events: auto; }
-  #stick-knob { position: absolute; left: 34px; top: 34px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.45); }
-  .tbtn { position: absolute; pointer-events: auto; width: 58px; height: 58px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(5,10,25,0.55); color: #fff; font-size: 11px; font-weight: bold; }
-  #btn-shoot { right: 24px; bottom: 96px; background: rgba(255,45,120,0.6); }
-  #btn-car { right: 96px; bottom: 30px; }
-  #btn-jump { right: 24px; bottom: 168px; }
-  #btn-run { right: 96px; bottom: 108px; }
-  #btn-pause { right: 14px; top: 120px; width: 46px; height: 46px; }
+  #health { background: linear-gradient(90deg, #2eff7a, #7dffab); width: 100%; }
+  #armor { background: linear-gradient(90deg, #2e7dff, #7db4ff); width: 0%; }
+  #stars { font-size: 17px; letter-spacing: 2px; color: #ffc233; margin-top: 2px; }
+  #weapons { font-size: 12px; opacity: .95; margin-top: 3px; }
+  #weapons span { background: rgba(0,0,0,.5); border-radius: 4px; padding: 2px 6px; margin-right: 4px; }
+  #weapons span.sel { background: rgba(255,46,136,.75); }
+  #hud-tr { top: 12px; right: 14px; text-align: right; }
+  #cash { font-size: 19px; font-weight: bold; color: #7dffab; }
+  #clock { font-size: 15px; }
+  #weather { font-size: 13px; opacity: .9; }
+  #mission-card { top: 118px; left: 14px; background: rgba(10,12,20,.62); border-left: 4px solid #ff2e88; border-radius: 4px; padding: 8px 12px; max-width: 260px; }
+  #mission { font-weight: bold; color: #ff8fb8; font-size: 14px; }
+  #missionBrief { font-size: 12px; opacity: .92; margin-top: 2px; }
+  #toast { top: 18px; left: 50%; transform: translateX(-50%); background: rgba(10,12,20,.75); border: 1px solid rgba(0,229,255,.5); border-radius: 6px; padding: 8px 16px; font-size: 14px; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #prompt { top: 58%; left: 50%; transform: translateX(-50%); background: rgba(10,12,20,.8); border: 1px solid #ffc233; border-radius: 6px; padding: 8px 14px; font-size: 14px; display: none; }
+  #center { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 22px; color: rgba(255,255,255,.9); display: none; }
+  #minimap-wrap { bottom: 14px; right: 14px; }
+  #minimap { border: 2px solid rgba(255,255,255,.5); border-radius: 6px; background: #0d1526; display: block; }
+  #speed { text-align: right; font-size: 13px; margin-bottom: 4px; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: radial-gradient(ellipse at center, rgba(20,10,40,.55), rgba(5,5,15,.92)); color: #fff; z-index: 10; text-align: center; }
+  .overlay h1 { font-size: 52px; margin: 0; letter-spacing: 4px; background: linear-gradient(90deg, #ff2e88, #ffc233, #00e5ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .overlay h2 { font-size: 15px; letter-spacing: 6px; opacity: .85; margin: 6px 0 18px; }
+  .overlay p { max-width: 520px; font-size: 14px; line-height: 1.6; opacity: .9; }
+  .overlay button { pointer-events: auto; cursor: pointer; font-size: 17px; font-weight: bold; color: #0a0e1e; background: linear-gradient(90deg, #ff2e88, #ffc233); border: none; border-radius: 8px; padding: 13px 34px; margin-top: 18px; }
+  .overlay button:hover { filter: brightness(1.15); }
+  .overlay .keys { font-size: 12px; opacity: .75; margin-top: 16px; line-height: 1.8; }
+  #shop { display: none; }
+  #shop .box { background: rgba(10,12,20,.94); border: 1px solid #00e5ff; border-radius: 10px; padding: 20px 26px; pointer-events: auto; }
+  #shop h2 { margin: 0 0 10px; color: #00e5ff; }
+  #shop button { display: block; width: 100%; margin: 7px 0; padding: 10px 18px; font-size: 15px; }
+  #mission-list { display: none; }
+  #mission-list .box { background: rgba(10,12,20,.94); border: 1px solid #ffc233; border-radius: 10px; padding: 20px 26px; pointer-events: auto; text-align: left; }
+  #touch { display: none; position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+  #touch button { pointer-events: auto; position: fixed; border-radius: 50%; border: 2px solid rgba(255,255,255,.6); background: rgba(0,0,0,.45); color: #fff; font-size: 13px; font-weight: bold; width: 58px; height: 58px; }
   @media (max-width: 700px) {
-    .screen h1 { font-size: 38px; }
-    #mission-box { max-width: 220px; font-size: 12px; top: 126px; }
-    #minimap { width: 116px; height: 116px; }
+    .overlay h1 { font-size: 34px; }
+    #mission-card { max-width: 180px; top: 108px; }
     .bar { width: 120px; }
   }
 </style>
 </head>
 <body>
-<div id="app"></div>
-<div id="hud-top-left" class="hud">
-  <div>KAI REYES</div>
-  <div class="bar"><div id="health-fill"></div></div>
-  <div class="bar"><div id="armor-fill"></div></div>
-  <div id="wanted"></div>
-  <div id="weapon">PISTOL · ∞</div>
+<canvas id="game" aria-label="Neon Bay: an open-world crime game. Move with WASD, look with the mouse, E to enter a car."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div class="panel" id="hud-tl">
+  <div class="name">KAI REYES</div>
+  <div class="bar"><div id="health"></div></div>
+  <div class="bar"><div id="armor"></div></div>
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="weapons"></div>
 </div>
-<div id="hud-top-right" class="hud">
-  <div id="money">$500</div>
-  <div id="clock">18:00</div>
-  <div id="weather-label">☀ Clear</div>
+<div class="panel" id="hud-tr">
+  <div id="cash">$500</div>
+  <div id="clock">21:36</div>
+  <div id="weather">☀ Clear</div>
 </div>
-<div id="mission-box" class="hud"><b id="mission-name">Welcome to Neon Bay</b><br><span id="mission-text">Walk to the glowing marker to start your first job.</span></div>
-<div id="hint" class="hud">WASD move · Shift sprint · Space jump · E enter car · Click to lock mouse</div>
-<div id="interact" class="hud"></div>
-<div id="crosshair" class="hud">✛</div>
-<div id="speed" class="hud"></div>
-<canvas id="minimap" width="168" height="168"></canvas>
-<div id="toast" class="hud"></div>
-<div id="touch-ui">
-  <div id="stick"><div id="stick-knob"></div></div>
-  <button class="tbtn" id="btn-shoot">TEMBAK</button>
-  <button class="tbtn" id="btn-car">MOBIL</button>
-  <button class="tbtn" id="btn-jump">LOMPAT</button>
-  <button class="tbtn" id="btn-run">LARI</button>
-  <button class="tbtn" id="btn-pause">II</button>
+<div class="panel" id="mission-card">
+  <div id="mission">First Fare</div>
+  <div id="missionBrief">Drive the taxi to the plaza pickup.</div>
 </div>
-<div id="start-screen" class="screen">
+<div class="panel" id="toast"></div>
+<div class="panel" id="prompt"></div>
+<div class="panel" id="center">+</div>
+<div class="panel" id="minimap-wrap">
+  <div id="speed"></div>
+  <canvas id="minimap" width="150" height="150"></canvas>
+</div>
+
+<div class="overlay" id="title-screen">
   <h1>NEON BAY</h1>
-  <h2>MAKE GTA 6 · VICE CITY STYLE</h2>
-  <p>You are <b>Kai Reyes</b>. A coastal city, six missions, fast cars, faster
-  money — and the Neon Bay police on your tail. Start at the plaza, take the
-  first job, and work your way to <b>King of the Bay</b>.</p>
-  <button id="start-btn">▶ START ENGINE</button>
+  <h2>AN OPEN-WORLD CRIME GAME</h2>
+  <p>You are <b>Kai Reyes</b>. The city is yours: steal cars, outrun the cops,
+  run fares, and climb six missions to become <b>King of the Bay</b> — $10,000.</p>
+  <button id="play-btn">▶ &nbsp;PLAY</button>
   <div class="keys">WASD move · Shift sprint · Space jump · Mouse look (click to lock)<br>
-  LMB shoot · RMB aim · R reload · E enter / exit car · F taxi job · V weather<br>
-  1/2/3 weapons · Esc pause &amp; settings · M minimap</div>
+  E enter / exit car · LMB shoot · RMB aim · 1/2/3 weapons · T taxi · V weather · M missions · Esc pause</div>
 </div>
-<div id="pause-screen" class="screen">
-  <h1 style="font-size:40px">PAUSED</h1>
-  <p>Take a breath, Kai. The city will wait.</p>
+
+<div class="overlay" id="pause-screen" style="display:none">
+  <h1>PAUSED</h1>
+  <p>Neon Bay waits for no one. Well — except now.</p>
   <button id="resume-btn">RESUME</button>
-  <button id="settings-btn" style="background:linear-gradient(180deg,#1c6dd9,#0d3a7a);border-color:#7dd7ff;box-shadow:0 0 22px rgba(45,155,255,0.5)">SETTINGS</button>
-  <button id="save-btn" style="background:linear-gradient(180deg,#2e9e5b,#145c31);border-color:#7dff9e;box-shadow:0 0 22px rgba(46,230,107,0.5)">SAVE GAME</button>
+  <button id="quit-btn" style="background:linear-gradient(90deg,#555,#888)">SAVE &amp; TITLE</button>
 </div>
-<div id="over-screen" class="screen">
-  <h1 style="font-size:40px;color:#ff5a5a;text-shadow:0 0 24px rgba(255,60,60,0.8)">BUSTED</h1>
-  <p id="over-text">The Neon Bay police caught up with you.</p>
+
+<div class="overlay" id="over-screen" style="display:none">
+  <h1>BUSTED</h1>
+  <p id="over-text">Kai got caught. The city keeps its crown — for now.</p>
   <button id="retry-btn">TRY AGAIN</button>
 </div>
-<div id="settings-screen" class="screen">
-  <div class="panel">
-    <h3>SETTINGS</h3>
-    <label>Volume <input id="set-volume" type="range" min="0" max="100" value="70"> <span id="set-volume-v">70</span></label>
-    <label>Mouse sensitivity <input id="set-sens" type="range" min="20" max="200" value="100"> <span id="set-sens-v">100</span></label>
-    <label>Graphics quality
-      <select id="set-quality">
-        <option value="low">Low</option>
-        <option value="med" selected>Medium</option>
-        <option value="high">High</option>
-      </select>
-    </label>
-    <label>Weather
-      <select id="set-weather">
-        <option value="clear" selected>Clear</option>
-        <option value="rain">Rain</option>
-      </select>
-    </label>
-    <div style="margin-top:14px">
-      <button id="settings-back">BACK</button>
-      <button id="settings-reset" style="background:#8a1f2d;border-color:#ff8f8f">RESET SAVE</button>
-    </div>
+
+<div class="overlay" id="shop">
+  <div class="box">
+    <h2 id="shop-title">AMMU-NATION</h2>
+    <div id="shop-items"></div>
+    <button id="shop-close">CLOSE (E)</button>
   </div>
 </div>
-<div id="shop-screen" class="screen">
-  <div class="panel">
-    <h3>AMMU-NATION</h3>
-    <div class="row"><span>Health pack (+50 HP) — $30</span><button data-buy="health">BUY</button></div>
-    <div class="row"><span>Body armor (+50) — $40</span><button data-buy="armor">BUY</button></div>
-    <div class="row"><span>Ammo refill (all weapons) — $25</span><button data-buy="ammo">BUY</button></div>
-    <div class="row"><span>Repair current vehicle — $100</span><button data-buy="repair">BUY</button></div>
-    <div style="margin-top:14px"><button id="shop-close">CLOSE</button></div>
+
+<div class="overlay" id="mission-list">
+  <div class="box">
+    <h2 style="color:#ffc233;margin:0 0 10px">MISSIONS — NEON BAY</h2>
+    <div id="mission-items" style="font-size:14px;line-height:2"></div>
+    <button id="mission-close">CLOSE (M)</button>
   </div>
 </div>
-<div id="wardrobe-screen" class="screen">
-  <div class="panel">
-    <h3>THREADS — WARDROBE</h3>
-    <div id="outfit-list"></div>
-    <div style="margin-top:14px"><button id="wardrobe-close">CLOSE</button></div>
-  </div>
+
+<div id="touch">
+  <button id="t-shoot" style="right:18px;bottom:96px">FIRE</button>
+  <button id="t-car" style="right:88px;bottom:30px">CAR</button>
+  <button id="t-jump" style="right:18px;bottom:170px">JUMP</button>
 </div>
-<div id="dialog-screen" class="screen">
-  <div id="dialog-box"><b id="dialog-name">Mara</b><br><span id="dialog-text"></span><br><br><button id="dialog-close" style="pointer-events:auto;cursor:pointer;padding:8px 20px;font-size:15px;color:#fff;background:#1c6dd9;border:1px solid #7dd7ff;border-radius:6px">OK</button></div>
-</div>
+
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.min.js" } }
 </script>

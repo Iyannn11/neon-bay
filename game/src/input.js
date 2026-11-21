@@ -1,130 +1,119 @@
-// Neon Bay — keyboard, mouse (pointer lock), and touch input. One state
-// object the game reads every frame; touch buttons feed the same state.
+// Neon Bay — input: keyboard, pointer-lock mouse look, drag-to-look fallback
+// (pointer lock can fail inside an iframe sandbox), and touch controls.
+// Written fresh for Round 12.
 export class Input {
-  constructor(canvas) {
+  constructor(canvas, game) {
     this.canvas = canvas;
+    this.game = game;
     this.keys = {};
-    this.forward = false; this.back = false; this.left = false; this.right = false;
-    this.sprint = false; this.jump = false;
-    this.mouseDX = 0; this.mouseDY = 0;
-    this.mouseDown = false; this.aimDown = false;
     this.locked = false;
-    this.stick = { x: 0, y: 0, active: false };
-    this.onAction = null; // (action) => {} — E, R, F, V, 1/2/3, Esc, M
-    this.onPause = null;
-    this.onAnyKey = null;
+    this.dragging = false;
+    this.lastX = 0; this.lastY = 0;
+    this.lookDX = 0; this.lookDY = 0;
+    this.mouseDown = false;
+    this.fired = false;
+    this.pressed = new Set(); // edge-triggered keys, consumed by the game loop
 
-    window.addEventListener('keydown', (e) => {
-      if (e.repeat) return;
-      this.keys[e.code] = true;
-      this.syncKeys();
-      if (this.onAnyKey) this.onAnyKey();
-      const map = {
-        KeyE: 'enter', KeyR: 'reload', KeyF: 'taxi', KeyV: 'weather',
-        Digit1: 'weapon1', Digit2: 'weapon2', Digit3: 'weapon3',
-        KeyM: 'minimap', Escape: 'pause',
-      };
-      if (map[e.code] && this.onAction) this.onAction(map[e.code]);
+    addEventListener('keydown', (e) => {
       if (e.code === 'Space') e.preventDefault();
+      if (!this.keys[e.code]) this.pressed.add(e.code);
+      this.keys[e.code] = true;
+      if (e.code === 'KeyM') game.toggleMissionList();
     });
-    window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
-      this.syncKeys();
-    });
+    addEventListener('keyup', (e) => { this.keys[e.code] = false; });
+
     canvas.addEventListener('click', () => {
-      if (!this.locked && document.pointerLockElement !== canvas) {
-        canvas.requestPointerLock?.();
+      if (this.game.state !== 'playing') return;
+      if (this.canvas.requestPointerLock) {
+        try {
+          const p = this.canvas.requestPointerLock();
+          if (p && p.catch) p.catch(() => {});
+        } catch (_) { /* pointer lock unavailable: drag-to-look covers it */ }
       }
     });
     document.addEventListener('pointerlockchange', () => {
-      this.locked = document.pointerLockElement === canvas;
+      this.locked = document.pointerLockElement === this.canvas;
     });
     document.addEventListener('mousemove', (e) => {
       if (this.locked) {
-        this.mouseDX += e.movementX;
-        this.mouseDY += e.movementY;
+        this.lookDX += e.movementX; this.lookDY += e.movementY;
+      } else if (this.dragging) {
+        this.lookDX += (e.clientX - this.lastX) * 1.6;
+        this.lookDY += (e.clientY - this.lastY) * 1.6;
+        this.lastX = e.clientX; this.lastY = e.clientY;
       }
     });
     canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this.mouseDown = true;
-      if (e.button === 2) this.aimDown = true;
+      if (this.game.state !== 'playing') return;
+      if (this.locked) {
+        if (e.button === 0) this.fired = true;
+        if (e.button === 2) this.game.player.aiming = true;
+      } else {
+        this.dragging = true;
+        this.lastX = e.clientX; this.lastY = e.clientY;
+        this.mouseDown = true;
+        this.dragMoved = 0;
+      }
     });
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.mouseDown = false;
-      if (e.button === 2) this.aimDown = false;
+    addEventListener('mouseup', (e) => {
+      if (e.button === 2) this.game.player.aiming = false;
+      if (this.dragging) {
+        // a short press without drag counts as a shot
+        if ((this.dragMoved || 0) < 6 && this.mouseDown) this.fired = true;
+        this.dragging = false; this.mouseDown = false;
+      }
+    });
+    addEventListener('mousemove', (e) => {
+      if (this.dragging) this.dragMoved = (this.dragMoved || 0) + Math.abs(e.movementX) + Math.abs(e.movementY);
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Touch: virtual joystick + action buttons feed the same state.
-    if ('ontouchstart' in window) {
-      document.getElementById('touch-ui').style.display = 'block';
-      this.bindStick();
-      this.bindButton('btn-shoot', (down) => { this.mouseDown = down; });
-      this.bindButton('btn-car', (down) => { if (down && this.onAction) this.onAction('enter'); });
-      this.bindButton('btn-jump', (down) => { this.jumpTouch = down; this.syncKeys(); });
-      this.bindButton('btn-run', (down) => { this.sprintTouch = down; this.syncKeys(); });
-      this.bindButton('btn-pause', (down) => { if (down && this.onAction) this.onAction('pause'); });
-    }
-  }
-
-  syncKeys() {
-    this.forward = !!this.keys.KeyW || !!this.keys.ArrowUp || this.stick.y < -0.25;
-    this.back = !!this.keys.KeyS || !!this.keys.ArrowDown || this.stick.y > 0.25;
-    this.left = !!this.keys.KeyA || !!this.keys.ArrowLeft || this.stick.x < -0.25;
-    this.right = !!this.keys.KeyD || !!this.keys.ArrowRight || this.stick.x > 0.25;
-    this.sprint = !!this.keys.ShiftLeft || !!this.keys.ShiftRight || !!this.sprintTouch;
-    this.jump = !!this.keys.Space || !!this.jumpTouch;
-  }
-
-  bindStick() {
-    const stick = document.getElementById('stick');
-    const knob = document.getElementById('stick-knob');
-    let id = null;
-    const move = (e) => {
-      const t = [...e.changedTouches].find((x) => x.identifier === id);
-      if (!t) return;
-      const r = stick.getBoundingClientRect();
-      let dx = (t.clientX - (r.left + r.width / 2)) / (r.width / 2);
-      let dy = (t.clientY - (r.top + r.height / 2)) / (r.height / 2);
-      const len = Math.hypot(dx, dy);
-      if (len > 1) { dx /= len; dy /= len; }
-      this.stick.x = dx; this.stick.y = dy;
-      knob.style.left = `${34 + dx * 30}px`;
-      knob.style.top = `${34 + dy * 30}px`;
-      this.syncKeys();
-    };
-    stick.addEventListener('touchstart', (e) => {
+    // touch: left half = move stick, right half = drag look, buttons = actions
+    this.touchMove = { x: 0, y: 0, active: false, id: null };
+    canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      id = e.changedTouches[0].identifier;
-      this.stick.active = true;
-      move(e);
-    }, { passive: false });
-    stick.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, { passive: false });
-    const end = (e) => {
-      if ([...e.changedTouches].some((x) => x.identifier === id)) {
-        id = null;
-        this.stick.x = 0; this.stick.y = 0; this.stick.active = false;
-        knob.style.left = '34px'; knob.style.top = '34px';
-        this.syncKeys();
+      for (const t of e.changedTouches) {
+        if (t.clientX < innerWidth * 0.45 && this.touchMove.id === null) {
+          this.touchMove.id = t.identifier;
+          this.touchMove.active = true;
+          this.touchMove.ox = t.clientX; this.touchMove.oy = t.clientY;
+        } else {
+          this.touchLookId = t.identifier;
+          this.touchLX = t.clientX; this.touchLY = t.clientY;
+        }
       }
-    };
-    stick.addEventListener('touchend', end);
-    stick.addEventListener('touchcancel', end);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier === this.touchMove.id) {
+          this.touchMove.x = (t.clientX - this.touchMove.ox) / 60;
+          this.touchMove.y = (t.clientY - this.touchMove.oy) / 60;
+        } else if (t.identifier === this.touchLookId) {
+          this.lookDX += (t.clientX - this.touchLX) * 2.4;
+          this.lookDY += (t.clientY - this.touchLY) * 2.4;
+          this.touchLX = t.clientX; this.touchLY = t.clientY;
+        }
+      }
+    }, { passive: false });
+    canvas.addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === this.touchMove.id) { this.touchMove.id = null; this.touchMove.active = false; this.touchMove.x = 0; this.touchMove.y = 0; }
+        if (t.identifier === this.touchLookId) this.touchLookId = null;
+      }
+    });
   }
 
-  bindButton(id, fn) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); fn(true); }, { passive: false });
-    el.addEventListener('touchend', (e) => { e.preventDefault(); fn(false); }, { passive: false });
-    el.addEventListener('mousedown', () => fn(true));
-    el.addEventListener('mouseup', () => fn(false));
+  consumeLook() {
+    const dx = this.lookDX, dy = this.lookDY;
+    this.lookDX = 0; this.lookDY = 0;
+    return [dx, dy];
   }
 
-  // Consume accumulated mouse movement for this frame.
-  takeMouse() {
-    const dx = this.mouseDX, dy = this.mouseDY;
-    this.mouseDX = 0; this.mouseDY = 0;
-    return { dx, dy };
+  wasPressed(code) {
+    if (this.pressed.has(code)) { this.pressed.delete(code); return true; }
+    return false;
   }
+
+  endFrame() { this.pressed.clear(); this.fired = false; }
 }

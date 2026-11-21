@@ -1,86 +1,71 @@
-// Neon Bay — tuning constants. One place for every number the rest of the
-// game reads, so balancing never means hunting through files.
-export const CONFIG = {
-  // World layout (units are metres; the city core is a grid around origin).
-  worldSize: 560,
-  blockSize: 64,
-  roadWidth: 12,
-  beachX: 236, // east edge: sand starts here
-  oceanX: 268, // east edge: water starts here
-  plaza: { x: 0, z: 0, half: 42 },
+// Neon Bay — shared constants: city layout, palette, missions, tuning.
+// Written fresh for Round 12. All units are metres; y is up; the city centre
+// (plaza + fountain) is at the origin, the beach and sea are east (+x).
 
-  // Player
-  walkSpeed: 6,
-  sprintSpeed: 10.5,
-  jumpSpeed: 8.5,
-  gravity: 24,
-  playerRadius: 0.55,
-
-  // Vehicles
-  carTopSpeed: 38,
-  carAccel: 16,
-  carBrake: 30,
-  bikeTopSpeed: 46,
-  bikeAccel: 20,
-  taxiFare: 120,
-
-  // Combat
-  weapons: {
-    pistol: { name: 'Pistol', damage: 34, mag: 12, reloadMs: 900, rateMs: 260, range: 60, spread: 0.012 },
-    smg: { name: 'SMG', damage: 18, mag: 32, reloadMs: 1400, rateMs: 85, range: 55, spread: 0.03 },
-    shotgun: { name: 'Shotgun', damage: 22, pellets: 6, mag: 6, reloadMs: 1800, rateMs: 700, range: 28, spread: 0.09 },
-  },
-
-  // Economy
-  prices: { health: 30, armor: 40, ammo: 25, repair: 100, outfit: 50 },
-  rewards: { crate: 100, photo: 50, stunt: 60, race: 250, missionFinale: 10000 },
-
-  // Police
-  maxWanted: 5,
-  wantedDecaySeconds: 14,
-  copChaseSpeed: 30,
-
-  // Visual
-  fogNear: 130,
-  fogFar: 480,
-  sunIntensity: 2.6,
-  hemiIntensity: 0.85,
-  shadowMapSize: 1024,
-
-  // Times of day (0..1 around the clock; used by the sky dome)
-  times: {
-    morning: { top: 0x6a8fd0, horizon: 0xffb08a, sun: 0xffd9a0, fog: 0xe8b48a, hemi: 0.75, sunI: 2.2, ambient: 0.45 },
-    day: { top: 0x2f7fd0, horizon: 0xbfdcff, sun: 0xfff3c4, fog: 0xc7d9ea, hemi: 0.9, sunI: 2.8, ambient: 0.55 },
-    golden: { top: 0x3a4a8f, horizon: 0xff9a52, sun: 0xffd27a, fog: 0xe8a06a, hemi: 0.7, sunI: 2.2, ambient: 0.42 },
-    night: { top: 0x050914, horizon: 0x1a2340, sun: 0x8fb4ff, fog: 0x0d1526, hemi: 0.32, sunI: 0.5, ambient: 0.2 },
-  },
+export const CITY = {
+  // drivable city bounds (roads + blocks)
+  half: 150,
+  // beach sand strip and sea
+  beachX0: 168, beachX1: 236, seaX0: 236, seaX1: 320,
+  // marina basin (south-east corner)
+  marina: { x0: 96, x1: 168, z0: 96, z1: 168 },
+  // avenue / street centre lines (roads are 14 wide, sidewalks 3 each side)
+  avenues: [-120, -60, 0, 60, 120],
+  streets: [-120, -60, 0, 60, 120],
+  roadWidth: 14,
+  sidewalk: 3,
+  // plaza at the centre
+  plazaR: 26,
+  seed: 1337,
 };
 
-// Mission chain data: name, blurb, target position, reward.
+export const PALETTE = {
+  night: 0x0a0e1e,
+  duskTop: 0x2a1a4a, duskMid: 0xb34a6e, duskLow: 0xff8c4a,
+  dayTop: 0x3f8fd2, dayLow: 0xbfd9e8,
+  asphalt: 0x23262b, asphaltLine: 0xd8d8d8,
+  sidewalk: 0x8a8f96, curb: 0xb9bec6,
+  sand: 0xd9c08a, sea: 0x0e3a5e, seaDeep: 0x082a44,
+  neonPink: 0xff2e88, neonCyan: 0x00e5ff, neonGold: 0xffc233, neonPurple: 0xb14aff,
+  kaiJacket: 0x0fa3a3, kaiPants: 0x1c2733, kaiSkin: 0xc98d64, kaiCap: 0xff2e88,
+  taxiYellow: 0xffc233, policeWhite: 0xf2f2f2, policeBlack: 0x14181f,
+};
+
 export const MISSIONS = [
-  { name: 'First Fare', blurb: 'Drive the taxi to the plaza pickup.', target: [0, 0], reward: 150 },
-  { name: 'Neon Run', blurb: 'Race through 3 gates on the highway ring.', target: [180, -120], reward: 300 },
-  { name: 'Crate Hunter', blurb: 'Collect 3 neon crates around the marina.', target: [150, 150], reward: 400 },
-  { name: 'Heat Up', blurb: 'Lose a 2-star wanted level.', target: [-120, 120], reward: 600 },
-  { name: 'The Pickup', blurb: 'Meet the contact at the beach bar.', target: [210, 60], reward: 900 },
-  { name: 'King of the Bay', blurb: 'Clear the marina guards and take the crown.', target: [150, 150], reward: 10000 },
+  { id: 0, name: 'First Fare', brief: 'Drive the taxi to the plaza pickup.', pay: 500, type: 'taxi' },
+  { id: 1, name: 'Neon Run', brief: 'Race through 3 gates on the highway ring.', pay: 1200, type: 'race' },
+  { id: 2, name: 'Crate Rush', brief: 'Collect 5 neon crates before the cops notice.', pay: 1500, type: 'collect' },
+  { id: 3, name: 'Harbor Heat', brief: 'Clear the marina guards and take the boat.', pay: 2500, type: 'combat' },
+  { id: 4, name: 'Night Shift', brief: 'Lose a 3-star wanted level, then reach the hideout.', pay: 4000, type: 'escape' },
+  { id: 5, name: 'King of the Bay', brief: 'Take the crown at the plaza. No backup. $10,000.', pay: 10000, type: 'finale' },
 ];
 
-// Named NPC dialogue lines (8 named characters).
-export const NPC_LINES = [
-  { name: 'Mara', line: 'The marina guards change shift at midnight. Just saying.' },
-  { name: 'Dante', line: 'Golden hour on the highway ring — best photos in the city.' },
-  { name: 'Luz', line: 'Taxis pay best near the plaza after dark. Trust me.' },
-  { name: 'Rico', line: 'AMMU-NATION restocked this morning. SMG ammo is cheap today.' },
-  { name: 'Sofia', line: 'Neon crates glow pink at night. Ten of them, all over town.' },
-  { name: 'Kenji', line: 'The Vortex R1 corners like it is on rails. The cruiser is comfier.' },
-  { name: 'Aya', line: 'Rain makes the roads slick. Brake early or you will meet a wall.' },
-  { name: 'Marco', line: 'King of the Bay? Nobody has cleared the marina in years.' },
+export const SHOPS = {
+  ammo: { name: 'AMMU-NATION', items: [
+    { key: 'health', label: 'Health', price: 30 },
+    { key: 'armor', label: 'Armor', price: 40 },
+    { key: 'ammo', label: 'Ammo', price: 25 },
+  ]},
+  threads: { name: 'THREADS', outfits: [
+    { key: 'teal', label: 'Teal Rider', price: 50, jacket: 0x0fa3a3 },
+    { key: 'pink', label: 'Vice Pink', price: 50, jacket: 0xff2e88 },
+    { key: 'gold', label: 'Gold Hour', price: 50, jacket: 0xffc233 },
+    { key: 'violet', label: 'Neon Violet', price: 50, jacket: 0xb14aff },
+  ]},
+  spray: { name: 'PAY N SPRAY', repair: 100 },
+};
+
+export const WEAPONS = [
+  { key: 'pistol', name: 'Pistol', damage: 34, rate: 0.28, mag: 12, spread: 0.012, auto: false },
+  { key: 'smg', name: 'SMG', damage: 16, rate: 0.085, mag: 32, spread: 0.03, auto: true },
+  { key: 'shotgun', name: 'Shotgun', damage: 22, rate: 0.85, mag: 6, spread: 0.075, auto: false, pellets: 6 },
 ];
 
-export const OUTFITS = [
-  { name: 'Neon Street', jacket: 0x00c2a8, pants: 0x1c2733, cap: 0xff2d78 },
-  { name: 'Vice Sunset', jacket: 0xff5a3c, pants: 0x2a1e33, cap: 0xffc233 },
-  { name: 'Midnight', jacket: 0x2b3a67, pants: 0x11131a, cap: 0x7dd7ff },
-  { name: 'Palm Gold', jacket: 0xd9a441, pants: 0x24382b, cap: 0xffffff },
-];
+export const TUNING = {
+  walkSpeed: 5.2, sprintSpeed: 8.6, jumpVel: 7.5, gravity: 20,
+  carAccel: 14, carBrake: 30, carMax: 34, carReverse: 10, carTurn: 1.9,
+  bikeAccel: 17, bikeMax: 38,
+  wantedDecay: 6, policeSpawn: 2.2, heliAt: 3,
+  crateCount: 10, trafficCount: 14, pedCount: 26,
+  camDist: 9.5, camHeight: 3.4,
+};

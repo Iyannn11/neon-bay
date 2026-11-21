@@ -1,64 +1,52 @@
-// Neon Bay — weather. Clear skies or a full rainstorm: falling streaks,
-// a grey overcast dome, and darker fog. Toggle with V or in Settings.
+// Neon Bay — weather: rain (instanced streaks + splash darkening) and clear
+// skies, toggled by key or the settings menu. Written fresh for Round 12.
 import * as THREE from 'three';
 
 export class Weather {
-  constructor(scene, sky) {
+  constructor(scene) {
     this.scene = scene;
-    this.sky = sky;
-    this.mode = 'clear';
-    this.rainCount = 1600;
-    const pos = new Float32Array(this.rainCount * 3);
-    for (let i = 0; i < this.rainCount; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 120;
-      pos[i * 3 + 1] = Math.random() * 50;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 120;
-    }
+    this.rain = false;
+    this.intensity = 0;
+    const N = 900;
     const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    this.drops = [];
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 160;
+      pos[i * 3 + 1] = Math.random() * 60;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 160;
+      this.drops.push({ x: pos[i * 3], y: pos[i * 3 + 1], z: pos[i * 3 + 2], v: 28 + Math.random() * 14 });
+    }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.rain = new THREE.Points(geo, new THREE.PointsMaterial({
-      color: 0xaac4de, size: 0.35, transparent: true, opacity: 0.7,
+    this.points = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0xaac8e8, size: 0.35, transparent: true, opacity: 0,
     }));
-    this.rain.visible = false;
-    this.rain.name = 'rain';
-    scene.add(this.rain);
-    this.offset = new THREE.Vector3();
+    this.points.frustumCulled = false;
+    scene.add(this.points);
+    this.geo = geo;
   }
 
-  set(mode) {
-    this.mode = mode;
-    this.rain.visible = mode === 'rain';
-    if (mode === 'rain') {
-      // Overcast: dim the sun, grey the dome and the fog.
-      this.sky.uniforms.topColor.value.setHex(0x3a4252);
-      this.sky.uniforms.horizonColor.value.setHex(0x6a7078);
-      this.sky.scene.fog.color.setHex(0x4a5058);
-      this.sky.scene.background.setHex(0x4a5058);
-      if (this.sky.sunLight) this.sky.sunLight.intensity = 0.9;
-      if (this.sky.hemi) this.sky.hemi.intensity = 0.5;
-    } else {
-      this.sky.setTime(this.sky.timeOfDay);
-    }
+  toggle() { this.setRain(!this.rain); }
+
+  setRain(on) {
+    this.rain = on;
+    this.points.material.opacity = on ? 0.75 : 0;
   }
 
-  toggle() {
-    this.set(this.mode === 'rain' ? 'clear' : 'rain');
-    return this.mode;
-  }
-
-  update(dt, playerPos) {
-    if (this.mode !== 'rain') return;
-    const pos = this.rain.geometry.attributes.position;
-    for (let i = 0; i < this.rainCount; i++) {
-      let y = pos.getY(i) - dt * 42;
-      if (y < 0) {
-        y = 45 + Math.random() * 5;
-        pos.setX(i, playerPos.x + (Math.random() - 0.5) * 120);
-        pos.setZ(i, playerPos.z + (Math.random() - 0.5) * 120);
+  step(dt, center) {
+    if (!this.rain) return;
+    const pos = this.geo.attributes.position.array;
+    for (let i = 0; i < this.drops.length; i++) {
+      const d = this.drops[i];
+      d.y -= d.v * dt;
+      d.x += dt * 3; // wind slant
+      if (d.y < 0) {
+        d.y = 45 + Math.random() * 15;
+        d.x = center.x + (Math.random() - 0.5) * 160;
+        d.z = center.z + (Math.random() - 0.5) * 160;
       }
-      pos.setY(i, y);
+      pos[i * 3] = d.x; pos[i * 3 + 1] = d.y; pos[i * 3 + 2] = d.z;
     }
-    pos.needsUpdate = true;
-    this.rain.position.set(0, 0, 0);
+    this.geo.attributes.position.needsUpdate = true;
   }
 }
