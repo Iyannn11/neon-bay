@@ -1,231 +1,340 @@
-// Neon Bay — missions, taxi fares, and collectibles.
-//
-// One clear job: the story. A 6-mission chain from the first pickup to the
-// $10,000 finale, plus taxi fares and ten hidden neon crates as side work.
-// Each step has a glowing 3D marker, a HUD objective, and a payout.
+// Neon Bay — missions and side work. Six chained story missions (the finale
+// pays $10,000), plus repeatable taxi fares, street races, stunt jumps and
+// photo spots. One beacon marks the current objective; the HUD and minimap
+// read the same state.
 
-import * as THREE from 'three';
-import { MISSIONS, TAXI_FARE, CRATE_COUNT, CRATE_REWARD } from './config.js';
-import { range, pick, clamp, dist2D } from './random.js';
+import * as THREE from '../vendor/three.module.min.js';
+import { MISSIONS, CRATE_VALUE } from './config.js';
+import { clamp, range, pick } from './random.js';
 
-function markerMesh(color) {
+function makeGuard(scene, x, z) {
   const g = new THREE.Group();
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.6, 1.6, 60, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.26, 0.32, 0.85, 8),
+    new THREE.MeshStandardMaterial({ color: 0xc22a2a, roughness: 0.8 }),
   );
-  beam.position.y = 30;
-  g.add(beam);
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(2.2, 0.22, 8, 24),
-    new THREE.MeshBasicMaterial({ color }),
+  body.position.y = 1.15;
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.24, 10, 8),
+    new THREE.MeshStandardMaterial({ color: 0xd9a06b, roughness: 0.6 }),
   );
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.25;
-  g.add(ring);
-  const diamond = new THREE.Mesh(
-    new THREE.OctahedronGeometry(0.9),
-    new THREE.MeshBasicMaterial({ color }),
+  head.position.y = 1.82;
+  const gun = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.1, 0.55),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.7 }),
   );
-  diamond.position.y = 4;
-  g.add(diamond);
-  g.userData.diamond = diamond;
+  gun.position.set(0.2, 1.35, 0.4);
+  g.add(body, head, gun);
+  g.position.set(x, 0, z);
+  g.userData = { hp: 30, dead: false, fallT: 0 };
+  scene.add(g);
   return g;
 }
 
 export class Missions {
-  constructor(scene, world, rng) {
+  constructor(scene, world, hooks) {
     this.scene = scene;
     this.world = world;
-    this.rng = rng;
-    this.index = 0; // next mission to run
-    this.active = null; // { def, step, timer, kills }
-    this.marker = null;
-    this.taxi = null; // { pickup, drop, fare, passenger }
-    this.crates = [];
-    this.cratesFound = 0;
-    this._spawnCrates();
-    this._spawnTaxiStands();
+    this.hooks = hooks; // {cash(amount, reason), toast(text), banner(text, sub)}
+    this.index = 0;
+    this.done = false;
+    this.allDone = false;
+    // side-work counters
+    this.cratesCollected = 0;
+    this.missionCrates = 0;
+    this.stuntsDone = new Set();
+    this.photosDone = new Set();
+    this.racesWon = new Set();
+    this.taxiJobs = 0;
+    this.taxi = { active: false, phase: 'idle', dest: null, fare: 0 };
+    this.race = { active: false, gate: -1, checkpoints: [], idx: 0, timer: 0 };
+    this.cleanTimer = 0;
+    this.guards = [];
+    this.crownTaken = false;
+    // objective beacon — short + soft, so it marks the spot without
+    // hiding the scene behind it
+    const beaconGeo = new THREE.CylinderGeometry(1.5, 1.5, 6, 14, 1, true);
+    this.beaconMat = new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false });
+    this.beacon = new THREE.Mesh(beaconGeo, this.beaconMat);
+    this.beacon.position.set(128, 3, 128);
+    scene.add(this.beacon);
+    const ringGeo = new THREE.RingGeometry(2.2, 3, 24);
+    this.ringMat = new THREE.MeshBasicMaterial({ color: 0xffe14d, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    this.ring = new THREE.Mesh(ringGeo, this.ringMat);
+    this.ring.rotation.x = -Math.PI / 2;
+    this.ring.position.set(128, 0.08, 128);
+    scene.add(this.ring);
+    this._startMission(0);
   }
 
-  _spawnCrates() {
-    for (let i = 0; i < CRATE_COUNT; i += 1) {
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(1.1, 1.1, 1.1),
-        new THREE.MeshStandardMaterial({ color: 0xff2e63, emissive: 0xff2e63, emissiveIntensity: 1.1, roughness: 0.3, metalness: 0.4 }),
-      );
-      const x = range(this.rng, -270, 270);
-      const z = range(this.rng, -270, 270);
-      mesh.position.set(x, 0.9, z);
-      mesh.rotation.y = this.rng() * Math.PI;
-      this.scene.add(mesh);
-      this.crates.push({ mesh, found: false });
+  get current() { return MISSIONS[this.index]; }
+
+  objectiveText() {
+    if (this.allDone) return 'King of the Bay! Free roam — taxi, races, stunts and photos still pay.';
+    const m = this.current;
+    if (!m) return '';
+    switch (m.id) {
+      case 'm1': return this._inVehicle ? 'Drive to the yellow marker.' : 'M1 First Wheels — steal any car (E).';
+      case 'm2':
+        if (this.taxi.phase === 'pickup') return 'M2 Taxi Driver — pick up the passenger at the plaza.';
+        if (this.taxi.phase === 'dropoff') return 'M2 Taxi Driver — drop the passenger at the beach.';
+        return 'M2 Taxi Driver — get in the yellow TAXI at the plaza.';
+      case 'm3':
+        if (this.race.active) return `M3 Neon Run — checkpoint ${this.race.idx + 1}/3, ${Math.ceil(this.race.timer)}s left!`;
+        return 'M3 Neon Run — drive through the checkered gate to start the race.';
+      case 'm4': return `M4 Crate Hunter — collect neon crates (${this.missionCrates}/3).`;
+      case 'm5':
+        if (this.cleanTimer > 0) return `M5 Heat — stay clean… ${Math.ceil(10 - this.cleanTimer)}s`;
+        return 'M5 Heat — lose the cops! Wanted 3 stars.';
+      case 'm6': {
+        const left = this.guards.filter((g) => !g.userData.dead).length;
+        if (left > 0) return `M6 King of the Bay — take out the marina guards (${4 - left}/4).`;
+        if (!this.crownTaken) return 'M6 King of the Bay — grab the crown crate at the marina!';
+        return 'M6 King of the Bay — done!';
+      }
+      default: return m.brief;
     }
   }
 
-  _spawnTaxiStands() {
-    // Taxi stands glow at the hotel and the pier — walk up to start a fare.
-    this.stands = [];
-    for (const [x, z] of [[190, 190], [-210, 250], [32, 96]]) {
-      const m = markerMesh(0xffd23e);
-      m.position.set(x, 0, z);
-      m.scale.setScalar(0.7);
-      this.scene.add(m);
-      this.stands.push({ x, z, mesh: m });
+  markerPos() {
+    if (this.allDone) return null;
+    const m = this.current;
+    if (!m) return null;
+    switch (m.id) {
+      case 'm1': return { x: 128, z: 128 };
+      case 'm2':
+        if (this.taxi.phase === 'pickup') return { x: 20, z: 20 };
+        if (this.taxi.phase === 'dropoff') return this.taxi.dest;
+        return { x: 24, z: 20 };
+      case 'm3':
+        if (this.race.active && this.race.idx < this.race.checkpoints.length) return this.race.checkpoints[this.race.idx];
+        return this.world.raceGates[0];
+      case 'm4': {
+        const c = this.world.crates.find((cc) => !cc.taken);
+        return c ? { x: c.x, z: c.z } : null;
+      }
+      case 'm5': return null;
+      case 'm6':
+        return this.guards.some((g) => !g.userData.dead) ? { x: 300, z: 0 } : { x: 306, z: 0 };
+      default: return null;
     }
   }
 
-  currentDef() {
-    return MISSIONS[this.index] ?? null;
+  _startMission(i) {
+    this.index = i;
+    const m = this.current;
+    if (!m) { this.allDone = true; return; }
+    this.hooks.toast(`Mission ${i + 1}: ${m.title} — ${m.brief}`);
+    this.hooks.banner(m.title, m.brief);
+    if (m.id === 'm2') this.taxi = { active: true, phase: 'enter', dest: { x: 270, z: 40 }, fare: 220 };
+    if (m.id === 'm3') this.race = { active: false, gate: -1, checkpoints: [], idx: 0, timer: 0 };
+    if (m.id === 'm4') this.missionCrates = 0;
+    if (m.id === 'm5') this.cleanTimer = 0;
+    if (m.id === 'm6') this._spawnGuards();
   }
 
-  startMission(onEvent) {
-    const def = this.currentDef();
-    if (!def || this.active) return false;
-    this.active = { def, step: 0, timer: def.timeLimit, kills: 0, waitLeft: 0 };
-    this._placeMarker();
-    if (onEvent) onEvent('start', def);
-    return true;
+  _spawnGuards() {
+    const spots = [[296, -20], [304, 10], [292, 30], [308, -40]];
+    for (const [x, z] of spots) this.guards.push(makeGuard(this.scene, x, z));
   }
 
-  _placeMarker() {
-    this._clearMarker();
-    if (!this.active) return;
-    const step = this.active.def.steps[this.active.step];
-    if (!step || step.x === undefined) return;
-    this.marker = markerMesh(0x00c2ff);
-    this.marker.position.set(step.x, 0, step.z);
-    this.scene.add(this.marker);
-  }
-
-  _clearMarker() {
-    if (this.marker) {
-      this.scene.remove(this.marker);
-      this.marker = null;
-    }
-  }
-
-  stepLabel() {
-    if (!this.active) return null;
-    return this.active.def.steps[this.active.step]?.label ?? '';
-  }
-
-  // Taxi: start a fare from a stand, drive the passenger to the drop-off.
-  startTaxi(onEvent) {
-    if (this.taxi || this.active) return false;
-    const drop = this.world.randomRoadPoint(this.rng);
-    const dist = dist2D(0, 0, drop.x, drop.z);
-    this.taxi = {
-      drop,
-      fare: Math.round(TAXI_FARE.base + dist * TAXI_FARE.perMetre),
-      marker: markerMesh(0xffd23e),
-    };
-    this.taxi.marker.position.set(drop.x, 0, drop.z);
-    this.scene.add(this.taxi.marker);
-    if (onEvent) onEvent('taxi', this.taxi);
-    return true;
-  }
-
-  update(dt, playerX, playerZ, inVehicle, wanted, onEvent) {
-    // Animate markers.
-    if (this.marker) {
-      this.marker.userData.diamond.rotation.y += dt * 2.4;
-      this.marker.userData.diamond.position.y = 4 + Math.sin(performance.now() * 0.004) * 0.5;
-    }
-    for (const s of this.stands) {
-      s.mesh.userData.diamond.rotation.y += dt * 1.6;
-    }
-    // Crates.
-    for (const c of this.crates) {
-      if (c.found) continue;
-      c.mesh.rotation.y += dt * 1.2;
-      c.mesh.position.y = 0.9 + Math.sin(performance.now() * 0.003 + c.mesh.position.x) * 0.15;
-      if (dist2D(playerX, playerZ, c.mesh.position.x, c.mesh.position.z) < 2.2) {
-        c.found = true;
-        c.mesh.visible = false;
-        this.cratesFound += 1;
-        if (onEvent) onEvent('crate', { reward: CRATE_REWARD, found: this.cratesFound });
+  // Shooting a guard: `point` is the bullet impact point. Returns the guard or null.
+  hitGuard(point) {
+    for (const g of this.guards) {
+      if (g.userData.dead) continue;
+      const d = Math.hypot(g.position.x - point.x, g.position.z - point.z);
+      if (d < 1.6 && Math.abs(point.y - 1.2) < 1.6) {
+        g.userData.hp -= 34;
+        if (g.userData.hp <= 0) {
+          g.userData.dead = true;
+          g.rotation.x = -Math.PI / 2;
+          g.position.y = 0.4;
+          this.hooks.toast('Guard down!');
+        }
+        return g;
       }
     }
-    // Taxi drop-off.
-    if (this.taxi) {
-      this.taxi.marker.userData.diamond.rotation.y += dt * 2.4;
-      if (dist2D(playerX, playerZ, this.taxi.drop.x, this.taxi.drop.z) < 5) {
-        const fare = this.taxi.fare + (chance(this.rng, TAXI_FARE.tipChance) ? 40 : 0);
-        this.scene.remove(this.taxi.marker);
-        this.taxi = null;
-        if (onEvent) onEvent('fare', { fare });
-      }
-    }
-    // Mission logic.
-    if (!this.active) return;
-    const m = this.active;
-    m.timer -= dt;
-    if (m.timer <= 0) {
-      this._fail('Time ran out.');
-      if (onEvent) onEvent('fail', { reason: 'Time ran out.' });
+    return null;
+  }
+
+  _completeMission(player) {
+    const m = this.current;
+    this.hooks.cash(m.reward, `Mission: ${m.title}`);
+    this.hooks.banner('MISSION COMPLETE', `${m.title}  +$${m.reward}`);
+    if (this.index + 1 >= MISSIONS.length) {
+      this.allDone = true;
+      this.hooks.banner('KING OF THE BAY', 'You run Neon Bay now. $10,000 earned.');
+      this.beacon.visible = false;
+      this.ring.visible = false;
       return;
     }
-    const step = m.def.steps[m.step];
-    if (!step) return;
-    if (step.type === 'goto') {
-      if (step.wanted !== undefined && wanted < step.wanted) {
-        // The finale wants the heat on — the escape only counts once the city is after you.
+    this._startMission(this.index + 1);
+  }
+
+  collectCrate(crate) {
+    if (crate.taken) return;
+    crate.taken = true;
+    crate.mesh.visible = false;
+    this.cratesCollected++;
+    this.hooks.cash(CRATE_VALUE, 'Neon crate');
+    this.hooks.toast(`Neon crate +$${CRATE_VALUE} (${this.cratesCollected}/10)`);
+    if (this.current && this.current.id === 'm4') {
+      this.missionCrates++;
+      if (this.missionCrates >= 3) this._completeMission();
+    }
+  }
+
+  tryStunt(x, z, speed) {
+    if (speed < 14) return false;
+    for (let i = 0; i < this.world.ramps.length; i++) {
+      const r = this.world.ramps[i];
+      if (this.stuntsDone.has(i)) continue;
+      if (Math.hypot(x - r.x, z - r.z) < 7) {
+        this.stuntsDone.add(i);
+        this.hooks.cash(60, 'Stunt jump');
+        this.hooks.toast(`STUNT JUMP +$60 (${this.stuntsDone.size}/5)`);
+        return true;
       }
-      if (dist2D(playerX, playerZ, step.x, step.z) < 6) {
-        if (step.needWanted !== undefined && wanted > step.needWanted) {
-          // Not yet: the cops are still on you. Keep running.
-        } else {
-          this._advance(onEvent);
+    }
+    return false;
+  }
+
+  tryPhoto(x, z) {
+    for (let i = 0; i < this.world.photoSpots.length; i++) {
+      const s = this.world.photoSpots[i];
+      if (this.photosDone.has(i)) continue;
+      if (Math.hypot(x - s.x, z - s.z) < 3.5) {
+        this.photosDone.add(i);
+        this.hooks.cash(50, 'Photo spot');
+        this.hooks.toast(`PHOTO SPOT +$50 (${this.photosDone.size}/3)`);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Driving through a race gate starts (or advances) a race.
+  tryRaceGate(x, z) {
+    for (let i = 0; i < this.world.raceGates.length; i++) {
+      const g = this.world.raceGates[i];
+      if (Math.hypot(x - g.x, z - g.z) > 8) continue;
+      if (this.current && this.current.id === 'm3' && !this.race.active) {
+        // mission race: checkpoints are the other two gates in order
+        const others = this.world.raceGates.filter((_, j) => j !== i);
+        this.race = { active: true, gate: i, checkpoints: [...others, g], idx: 0, timer: 75 };
+        this.hooks.toast('Race started! Hit all 3 checkpoints in 75s.');
+        return 'race-start';
+      }
+      if (this.race.active && this.race.idx < this.race.checkpoints.length) {
+        const cp = this.race.checkpoints[this.race.idx];
+        if (Math.hypot(x - cp.x, z - cp.z) < 8) {
+          this.race.idx++;
+          if (this.race.idx >= this.race.checkpoints.length) {
+            const won = this.current && this.current.id === 'm3';
+            this.race.active = false;
+            if (won) { this._completeMission(); return 'race-won'; }
+            if (!this.racesWon.has(i)) {
+              this.racesWon.add(i);
+              this.hooks.cash(300, 'Street race win');
+              this.hooks.toast('RACE WON +$300');
+            }
+            return 'race-won';
+          }
+          this.hooks.toast(`Checkpoint ${this.race.idx + 1}/3!`);
+          return 'checkpoint';
         }
       }
-    } else if (step.type === 'wait') {
-      if (dist2D(playerX, playerZ, step.x, step.z) < 7) {
-        m.waitLeft += dt;
-        if (m.waitLeft >= step.seconds) this._advance(onEvent);
-      } else {
-        m.waitLeft = 0;
+      if (!this.race.active && !this.racesWon.has(i) && !(this.current && this.current.id === 'm3')) {
+        // free-roam race from this gate
+        const others = this.world.raceGates.filter((_, j) => j !== i);
+        this.race = { active: true, gate: i, checkpoints: [...others, g], idx: 0, timer: 75 };
+        this.hooks.toast('Race started! Hit all 3 checkpoints in 75s.');
+        return 'race-start';
       }
-    } else if (step.type === 'steal') {
-      if (inVehicle && inVehicle.type === step.vehicle) {
-        this._advance(onEvent);
-      }
-    } else if (step.type === 'kill') {
-      if (m.kills >= step.count) this._advance(onEvent);
+      return null;
     }
+    return null;
   }
 
-  registerKill() {
-    if (this.active) this.active.kills += 1;
+  // Free-roam taxi job: called when the player is in the taxi near the stand.
+  tryTaxiJob(player) {
+    if (this.taxi.active) return false;
+    if (!player.inVehicle || player.inVehicle.kind !== 'taxi') return false;
+    if (Math.hypot(player.pos.x - 20, player.pos.z - 20) > 8) return false;
+    const dests = [{ x: 270, z: 40 }, { x: -224, z: -224 }, { x: 96, z: 224 }, { x: -96, z: -160 }];
+    const dest = pick(Math.random, dests);
+    this.taxi = { active: true, phase: 'dropoff', dest, fare: 40 + Math.floor(Math.random() * 50) };
+    this.hooks.toast(`Taxi job: take the passenger to the marker. Fare $${this.taxi.fare}.`);
+    return true;
   }
 
-  _advance(onEvent) {
-    const m = this.active;
-    m.step += 1;
-    m.waitLeft = 0;
-    if (m.step >= m.def.steps.length) {
-      const def = m.def;
-      this.active = null;
-      this._clearMarker();
-      this.index += 1;
-      if (onEvent) onEvent('done', def);
+  update(dt, ctx) {
+    const { player, police } = ctx;
+    // beacon follows the objective
+    const mp = this.markerPos();
+    if (mp && !this.allDone) {
+      this.beacon.visible = true;
+      this.ring.visible = true;
+      this.beacon.position.set(mp.x, 4.5, mp.z);
+      this.ring.position.set(mp.x, 0.08, mp.z);
+      this.beacon.rotation.y += dt * 1.2;
+      this.ringMat.opacity = 0.55 + Math.sin(performance.now() * 0.004) * 0.25;
     } else {
-      this._placeMarker();
-      if (onEvent) onEvent('step', m.def.steps[m.step]);
+      this.beacon.visible = false;
+      this.ring.visible = false;
     }
-  }
+    if (this.allDone) return;
+    const m = this.current;
+    if (!m) return;
+    const px = player.pos.x, pz = player.pos.z;
 
-  _fail(reason) {
-    this.active = null;
-    this._clearMarker();
-  }
-
-  abort() {
-    this.active = null;
-    this._clearMarker();
-    if (this.taxi) {
-      this.scene.remove(this.taxi.marker);
-      this.taxi = null;
+    if (m.id === 'm1') {
+      if (player.inVehicle && mp && Math.hypot(px - mp.x, pz - mp.z) < 9) this._completeMission(player);
+    } else if (m.id === 'm2') {
+      if (this.taxi.phase === 'enter' && player.inVehicle && player.inVehicle.kind === 'taxi') {
+        this.taxi.phase = 'pickup';
+        this.hooks.toast('Drive to the passenger at the plaza.');
+      } else if (this.taxi.phase === 'pickup' && Math.hypot(px - 20, pz - 20) < 7) {
+        this.taxi.phase = 'dropoff';
+        this.hooks.toast('Passenger aboard! Drive to the beach.');
+      } else if (this.taxi.phase === 'dropoff' && Math.hypot(px - this.taxi.dest.x, pz - this.taxi.dest.z) < 8) {
+        this.taxi.active = false;
+        this.taxi.phase = 'idle';
+        this._completeMission(player);
+      }
+    } else if (m.id === 'm3') {
+      if (this.race.active) {
+        this.race.timer -= dt;
+        if (this.race.timer <= 0) {
+          this.race.active = false;
+          this.hooks.toast('Race failed — drive through the gate to try again.');
+        }
+      }
+    } else if (m.id === 'm5') {
+      // mission starts the heat (set once by main via police); complete after 10 clean seconds at 0 stars
+      if (police.level === 0) {
+        this.cleanTimer += dt;
+        if (this.cleanTimer >= 10) this._completeMission(player);
+      } else {
+        this.cleanTimer = 0;
+      }
+    } else if (m.id === 'm6') {
+      const left = this.guards.filter((g) => !g.userData.dead).length;
+      if (left === 0 && !this.crownTaken) {
+        // crown crate appears at the marina
+        if (Math.hypot(px - 306, pz - 0) < 4) {
+          this.crownTaken = true;
+          this._completeMission(player);
+        }
+      }
+    }
+    // free-roam race timer
+    if (this.race.active && !(m.id === 'm3')) {
+      this.race.timer -= dt;
+      if (this.race.timer <= 0) {
+        this.race.active = false;
+        this.hooks.toast('Race failed — drive through a gate to try again.');
+      }
     }
   }
 }

@@ -1,92 +1,99 @@
-// Neon Bay — keyboard and mouse input.
-//
-// One clear job: track which keys are held and which were just pressed, so
-// the player, the driving and the menus all read the same input state.
+// Neon Bay — keyboard, mouse (pointer lock) and touch input in one place.
+// The game reads `held` for continuous actions and consumes `pressed` edges once.
 
 export class Input {
-  constructor() {
-    this.held = new Set();
-    this.pressed = new Set();
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.keys = new Set();
+    this.pressedKeys = new Set();
+    this.mouseDX = 0;
+    this.mouseDY = 0;
     this.mouseDown = false;
-    this.mouseX = 0;
-    this.mouseY = 0;
-    this.anyKey = false;
-    this._onKeyDown = (e) => {
+    this.mousePressed = false;
+    this.rightDown = false;
+    this.rightPressed = false;
+    this.locked = false;
+    this.sensitivity = 1.0;
+    // Touch: virtual joystick (left) + action buttons wired from hud.js.
+    this.joy = { active: false, x: 0, y: 0 };
+    this.touch = { fire: false, jump: false, car: false, run: false, aim: false };
+    this.touchPressed = { fire: false, jump: false, car: false };
+
+    window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
-      this.held.add(e.code);
-      this.pressed.add(e.code);
-      this.anyKey = true;
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
-    };
-    this._onKeyUp = (e) => {
-      this.held.delete(e.code);
-    };
-    this._onMouseDown = (e) => {
-      this.mouseDown = true;
-      this.mouseX = e.clientX;
-      this.mouseY = e.clientY;
-    };
-    this._onMouseUp = () => {
-      this.mouseDown = false;
-    };
-    this._onBlur = () => {
-      this.held.clear();
-      this.mouseDown = false;
-    };
-    window.addEventListener('keydown', this._onKeyDown);
-    window.addEventListener('keyup', this._onKeyUp);
-    window.addEventListener('mousedown', this._onMouseDown);
-    window.addEventListener('mouseup', this._onMouseUp);
-    window.addEventListener('blur', this._onBlur);
+      this.keys.add(e.code);
+      this.pressedKeys.add(e.code);
+      if (['Space', 'Tab', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouseDown = false; this.rightDown = false; });
+
+    document.addEventListener('pointerlockchange', () => {
+      this.locked = document.pointerLockElement === canvas;
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!this.locked) return;
+      this.mouseDX += e.movementX || 0;
+      this.mouseDY += e.movementY || 0;
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { this.mouseDown = true; this.mousePressed = true; }
+      if (e.button === 2) { this.rightDown = true; this.rightPressed = true; }
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mouseDown = false;
+      if (e.button === 2) this.rightDown = false;
+    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  isDown(code) {
-    return this.held.has(code);
+  lockPointer() {
+    if (!this.locked) {
+      try { this.canvas.requestPointerLock(); } catch (e) { /* pointer lock unavailable */ }
+    }
   }
 
-  // True once, on the frame the key went down. Consume it after reading.
-  wasPressed(code) {
-    return this.pressed.has(code);
+  unlockPointer() {
+    if (document.pointerLockElement) document.exitPointerLock();
   }
 
-  consume(code) {
-    this.pressed.delete(code);
+  held(code) { return this.keys.has(code); }
+
+  // Edge-triggered: true once per physical press, then consumed by endFrame().
+  pressed(code) { return this.pressedKeys.has(code); }
+  mouseClicked() { return this.mousePressed; }
+  rightClicked() { return this.rightPressed; }
+
+  moveVector() {
+    // Returns {x, z} in camera space: x = strafe right, z = forward.
+    let x = 0, z = 0;
+    if (this.held('KeyW') || this.held('ArrowUp')) z += 1;
+    if (this.held('KeyS') || this.held('ArrowDown')) z -= 1;
+    if (this.held('KeyA') || this.held('ArrowLeft')) x -= 1;
+    if (this.held('KeyD') || this.held('ArrowRight')) x += 1;
+    if (this.joy.active) { x += this.joy.x; z -= this.joy.y; }
+    const len = Math.hypot(x, z);
+    if (len > 1) { x /= len; z /= len; }
+    return { x, z };
   }
 
-  // WASD + arrows, merged into one steering/throttle pair.
-  driveAxes() {
-    const left = this.isDown('KeyA') || this.isDown('ArrowLeft');
-    const right = this.isDown('KeyD') || this.isDown('ArrowRight');
-    const up = this.isDown('KeyW') || this.isDown('ArrowUp');
-    const down = this.isDown('KeyS') || this.isDown('ArrowDown');
-    return {
-      steer: (left ? 1 : 0) - (right ? 1 : 0),
-      throttle: (up ? 1 : 0) - (down ? 1 : 0),
-      boost: this.isDown('ShiftLeft') || this.isDown('ShiftRight'),
-      brake: this.isDown('Space'),
-    };
-  }
+  sprinting() { return this.held('ShiftLeft') || this.held('ShiftRight') || this.touch.run; }
+  aiming() { return this.rightDown || this.touch.aim; }
+  firing() { return this.mouseDown || this.touch.fire; }
 
-  walkAxes() {
-    const x = (this.isDown('KeyD') || this.isDown('ArrowRight') ? 1 : 0)
-      - (this.isDown('KeyA') || this.isDown('ArrowLeft') ? 1 : 0);
-    const z = (this.isDown('KeyS') || this.isDown('ArrowDown') ? 1 : 0)
-      - (this.isDown('KeyW') || this.isDown('ArrowUp') ? 1 : 0);
-    return { x, z, sprint: this.isDown('ShiftLeft') || this.isDown('ShiftRight') };
+  consumeMouseDelta() {
+    const dx = this.mouseDX * this.sensitivity;
+    const dy = this.mouseDY * this.sensitivity;
+    this.mouseDX = 0; this.mouseDY = 0;
+    return { dx, dy };
   }
 
   endFrame() {
-    this.pressed.clear();
-    this.anyKey = false;
-  }
-
-  dispose() {
-    window.removeEventListener('keydown', this._onKeyDown);
-    window.removeEventListener('keyup', this._onKeyUp);
-    window.removeEventListener('mousedown', this._onMouseDown);
-    window.removeEventListener('mouseup', this._onMouseUp);
-    window.removeEventListener('blur', this._onBlur);
+    this.pressedKeys.clear();
+    this.mousePressed = false;
+    this.rightPressed = false;
+    this.touchPressed.fire = false;
+    this.touchPressed.jump = false;
+    this.touchPressed.car = false;
   }
 }

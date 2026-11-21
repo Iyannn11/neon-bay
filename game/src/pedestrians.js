@@ -1,132 +1,181 @@
-// Neon Bay — pedestrians.
-//
-// One clear job: fill the sidewalks with people. Cylinder-based characters
-// (rounded bodies, sphere heads, simple limbs) that wander the pavements,
-// cross at intersections, and run away when shots are fired.
+// Neon Bay — pedestrians. A crowd of walkers with their own walk cycles who
+// flee when shots ring out, plus eight named talkable NPCs: walk up, press E,
+// and they answer with one of their lines — sometimes with a cash tip or a
+// mission hint in return.
 
-import * as THREE from 'three';
-import { WORLD } from './config.js';
-import { range, pick, chance, clamp, angleLerp, dist2D } from './random.js';
+import * as THREE from '../vendor/three.module.min.js';
+import { WORLD, TALK_NPCS } from './config.js';
+import { mulberry32, range, int, pick, clamp, angleLerp } from './random.js';
 
-const HALF = WORLD.size / 2;
+const SHIRTS = [0xff5a5a, 0x5a8aff, 0x39d98a, 0xffc400, 0xb537f2, 0xf2f2f2, 0x2a2c33, 0xff8a3c];
+const PANTS = [0x2a2c33, 0x3a4a6b, 0x5a3a2a, 0x222222, 0x4a4a4a];
+const SKINS = [0xf2c9a0, 0xd9a06b, 0x8a5a3b, 0xc98a5a, 0xffe0b8];
 
-const SHIRTS = [0xff2e63, 0x00c2ff, 0xffd23e, 0x2eff8f, 0xb44dff, 0xffffff, 0xff8a3c, 0x7a5cff];
-const PANTS = [0x1d2438, 0x2a2f45, 0x3a3a48, 0x4f2a2a, 0x24384f];
-
-export function buildPersonMesh(rng) {
-  const group = new THREE.Group();
+function buildWalker(rng) {
+  const g = new THREE.Group();
+  const skin = pick(rng, SKINS);
   const shirt = pick(rng, SHIRTS);
   const pants = pick(rng, PANTS);
-  const skin = pick(rng, [0xe8b88a, 0xc98d5f, 0x8a5a3b, 0xf2c9a0]);
-  const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.32, 0.38, 0.85, 10),
-    new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.8 }),
-  );
-  torso.position.y = 1.05;
-  torso.castShadow = true;
-  group.add(torso);
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.26, 12, 10),
-    new THREE.MeshStandardMaterial({ color: skin, roughness: 0.7 }),
-  );
-  head.position.y = 1.72;
-  head.castShadow = true;
-  group.add(head);
+  const shirtMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.8 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: pants, roughness: 0.85 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.6 });
+
+  const legGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.85, 8);
+  legGeo.translate(0, -0.425, 0);
+  const legL = new THREE.Mesh(legGeo, pantsMat);
+  legL.position.set(-0.14, 0.86, 0);
+  const legR = new THREE.Mesh(legGeo, pantsMat);
+  legR.position.set(0.14, 0.86, 0);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 0.75, 10), shirtMat);
+  torso.position.y = 1.22;
+  const armGeo = new THREE.CylinderGeometry(0.075, 0.085, 0.68, 8);
+  armGeo.translate(0, -0.34, 0);
+  const armL = new THREE.Mesh(armGeo, shirtMat);
+  armL.position.set(-0.36, 1.55, 0);
+  const armR = new THREE.Mesh(armGeo, shirtMat);
+  armR.position.set(0.36, 1.55, 0);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), skinMat);
+  head.position.y = 1.84;
   const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.27, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2.2),
-    new THREE.MeshStandardMaterial({ color: pick(rng, [0x111111, 0x3a2a1a, 0x6b6b6b, 0x8a5a2b]), roughness: 0.9 }),
+    new THREE.SphereGeometry(0.25, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    new THREE.MeshStandardMaterial({ color: pick(rng, [0x1a1a1a, 0x4a2f18, 0x777777, 0x2a1a0a]), roughness: 0.9 }),
   );
-  hair.position.y = 1.76;
-  group.add(hair);
-  const legMat = new THREE.MeshStandardMaterial({ color: pants, roughness: 0.85 });
-  const legs = [];
-  for (const side of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.72, 8), legMat);
-    leg.position.set(side * 0.14, 0.36, 0);
-    leg.castShadow = true;
-    group.add(leg);
-    legs.push(leg);
-  }
-  const armMat = new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.8 });
-  const arms = [];
-  for (const side of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.62, 8), armMat);
-    arm.position.set(side * 0.44, 1.1, 0);
-    group.add(arm);
-    arms.push(arm);
-  }
-  group.userData.legs = legs;
-  group.userData.arms = arms;
-  return group;
+  hair.position.y = 0.04;
+  head.add(hair);
+  legL.castShadow = legR.castShadow = torso.castShadow = true;
+  g.add(legL, legR, torso, armL, armR, head);
+  g.userData = { legL, legR, armL, armR, head, torso };
+  return g;
 }
 
-export class Pedestrians {
-  constructor(scene, world, rng) {
-    this.world = world;
+class Walker {
+  constructor(scene, x, z, rng) {
+    this.mesh = buildWalker(rng);
+    this.mesh.position.set(x, 0, z);
+    this.heading = rng() * Math.PI * 2;
+    this.speed = range(rng, 1.0, 1.9);
+    this.baseSpeed = this.speed;
+    this.walkPhase = rng() * Math.PI * 2;
+    this.fleeTimer = 0;
     this.rng = rng;
-    this.people = [];
-    this.fleeing = false;
-    for (let i = 0; i < WORLD.pedestrianCount; i += 1) {
-      const mesh = buildPersonMesh(rng);
-      const p = world.randomRoadPoint(rng);
-      // Stand on the sidewalk, beside the road.
-      const vertical = Math.abs(p.x % 64) < 1;
-      const off = (rng() < 0.5 ? -1 : 1) * 9.5;
-      mesh.position.set(vertical ? p.x + off : p.x, 0, vertical ? p.z : p.z + off);
-      const heading = rng() * Math.PI * 2;
-      mesh.rotation.y = heading;
-      scene.add(mesh);
-      this.people.push({
-        mesh, heading,
-        speed: range(rng, 1.1, 2.0),
-        target: null,
-        walkPhase: rng() * Math.PI * 2,
-        scared: 0,
-      });
-    }
+    this.target = null;
+    this.dead = false;
+    this._pickTarget();
+    scene.add(this.mesh);
   }
 
-  scare(x, z, radius = 40) {
-    for (const p of this.people) {
-      if (dist2D(p.mesh.position.x, p.mesh.position.z, x, z) < radius) {
-        p.scared = 6;
-      }
-    }
+  _pickTarget() {
+    const half = WORLD.size / 2 - 40;
+    this.target = { x: range(this.rng, -half, half), z: range(this.rng, -half, half) };
   }
 
-  _pickTarget(p) {
-    const roads = this.world.roads;
-    const road = pick(this.rng, roads);
-    const along = range(this.rng, -280, 280);
-    const vertical = chance(this.rng, 0.5);
-    const off = (this.rng() < 0.5 ? -1 : 1) * 9.5;
-    p.target = vertical ? { x: road + off, z: along } : { x: along, z: road + off };
+  fleeFrom(x, z) {
+    this.fleeTimer = 3.5;
+    const dx = this.mesh.position.x - x, dz = this.mesh.position.z - z;
+    const d = Math.hypot(dx, dz) || 1;
+    this.target = {
+      x: this.mesh.position.x + (dx / d) * 40,
+      z: this.mesh.position.z + (dz / d) * 40,
+    };
   }
 
   update(dt) {
-    for (const p of this.people) {
-      if (!p.target || dist2D(p.mesh.position.x, p.mesh.position.z, p.target.x, p.target.z) < 2) {
-        this._pickTarget(p);
-      }
-      if (p.scared > 0) p.scared -= dt;
-      const fleeing = p.scared > 0;
-      const speed = fleeing ? 5.2 : p.speed;
-      const dx = p.target.x - p.mesh.position.x;
-      const dz = p.target.z - p.mesh.position.z;
-      const desired = Math.atan2(dx, dz);
-      p.heading = angleLerp(p.heading, desired, Math.min(1, dt * 4));
-      p.mesh.rotation.y = p.heading;
-      p.mesh.position.x += Math.sin(p.heading) * speed * dt;
-      p.mesh.position.z += Math.cos(p.heading) * speed * dt;
-      p.mesh.position.x = clamp(p.mesh.position.x, -HALF + 6, HALF - 6);
-      p.mesh.position.z = clamp(p.mesh.position.z, -HALF + 6, HALF - 6);
-      // Walk cycle: swing the arms and legs.
-      p.walkPhase += dt * speed * 3.4;
-      const swing = Math.sin(p.walkPhase) * (fleeing ? 0.7 : 0.45);
-      p.mesh.userData.legs[0].rotation.x = swing;
-      p.mesh.userData.legs[1].rotation.x = -swing;
-      p.mesh.userData.arms[0].rotation.x = -swing * 0.8;
-      p.mesh.userData.arms[1].rotation.x = swing * 0.8;
+    if (this.dead) return;
+    const p = this.mesh.position;
+    const dx = this.target.x - p.x, dz = this.target.z - p.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 2) { this._pickTarget(); return; }
+    const wantHeading = Math.atan2(dx, dz);
+    this.heading = angleLerp(this.heading, wantHeading, Math.min(1, dt * 3));
+    this.speed = this.fleeTimer > 0 ? this.baseSpeed * 2.6 : this.baseSpeed;
+    if (this.fleeTimer > 0) this.fleeTimer -= dt;
+    p.x += Math.sin(this.heading) * this.speed * dt;
+    p.z += Math.cos(this.heading) * this.speed * dt;
+    p.x = clamp(p.x, -310, 310);
+    p.z = clamp(p.z, -310, 310);
+    this.mesh.rotation.y = this.heading;
+    this.walkPhase += dt * this.speed * 4.2;
+    const s = Math.sin(this.walkPhase);
+    const u = this.mesh.userData;
+    u.legL.rotation.x = s * 0.55;
+    u.legR.rotation.x = -s * 0.55;
+    u.armL.rotation.x = -s * 0.45;
+    u.armR.rotation.x = s * 0.45;
+    this.mesh.position.y = Math.abs(Math.cos(this.walkPhase)) * 0.04;
+  }
+}
+
+export class Crowd {
+  constructor(scene, world) {
+    this.scene = scene;
+    this.world = world;
+    this.rng = mulberry32(4242);
+    this.walkers = [];
+    const half = WORLD.size / 2 - 40;
+    for (let i = 0; i < 32; i++) {
+      const w = new Walker(scene, range(this.rng, -half, half), range(this.rng, -half, half), this.rng);
+      this.walkers.push(w);
     }
+    // The eight talkable NPCs stand at the world's talk spots.
+    this.talkers = [];
+    for (let i = 0; i < TALK_NPCS.length; i++) {
+      const spot = world.talkSpots[i % world.talkSpots.length];
+      const w = new Walker(scene, spot.x, spot.z, this.rng);
+      w.isTalker = true;
+      w.name = TALK_NPCS[i].name;
+      w.lines = TALK_NPCS[i].lines;
+      w.talked = false;
+      // talkers wait in place, facing the street
+      w.target = { x: spot.x, z: spot.z };
+      w.baseSpeed = 0;
+      w.speed = 0;
+      this.talkers.push(w);
+      this.walkers.push(w);
+    }
+  }
+
+  update(dt) {
+    for (const w of this.walkers) {
+      if (w.isTalker) {
+        // talkers idle in place with a small breathing sway
+        const u = w.mesh.userData;
+        const t = performance.now() * 0.001;
+        u.armL.rotation.x = Math.sin(t + 1) * 0.06;
+        u.armR.rotation.x = -Math.sin(t + 1) * 0.06;
+        w.mesh.rotation.y += Math.sin(t * 0.3) * 0.0004;
+        continue;
+      }
+      w.update(dt);
+    }
+  }
+
+  scare(x, z, radius = 26) {
+    for (const w of this.walkers) {
+      if (w.dead || w.isTalker) continue;
+      const d = Math.hypot(w.mesh.position.x - x, w.mesh.position.z - z);
+      if (d < radius) w.fleeFrom(x, z);
+    }
+  }
+
+  // Nearest living talker within `radius` of (x, z), or null.
+  nearestTalker(x, z, radius = 3.2) {
+    let best = null, bd = radius;
+    for (const w of this.talkers) {
+      if (w.dead) continue;
+      const d = Math.hypot(w.mesh.position.x - x, w.mesh.position.z - z);
+      if (d < bd) { bd = d; best = w; }
+    }
+    return best;
+  }
+
+  // Nearest living walker within `radius` (for shooting). Returns {walker, dist}.
+  nearestWalker(x, z, radius = 2.2) {
+    let best = null, bd = radius;
+    for (const w of this.walkers) {
+      if (w.dead || w.isTalker) continue;
+      const d = Math.hypot(w.mesh.position.x - x, w.mesh.position.z - z);
+      if (d < bd) { bd = d; best = w; }
+    }
+    return best ? { walker: best, dist: bd } : null;
   }
 }
