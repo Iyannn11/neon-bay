@@ -1,319 +1,247 @@
-// Neon Bay — Kai Reyes, the player character. A jointed figure (legs, torso,
-// arms, head, chrome SMG) driven by a small animation state machine: idle
-// breathing, walk and run cycles, jump tuck, two-handed aim, recoil, and a
-// scripted walk-to-door / sit-down car entry. Movement is smooth: velocity
-// ramps up and down and the body turns toward the travel direction.
-
-import * as THREE from '../vendor/three.module.min.js';
-import { WORLD, PLAYER, WEAPONS, OUTFITS } from './config.js';
-import { clamp, angleLerp } from './random.js';
-
-const SKINS = [0xf2c9a0, 0xd9a06b, 0x8a5a3b];
-const HAIRS = [0x1a1a1a, 0x2a1a0a, 0x4a2f18];
+// Neon Bay — Kai Reyes. A real person, not a dark capsule: proper
+// proportions, a coloured jacket, separate arms and legs that swing,
+// a cap, and a chrome SMG that catches the light. A fill light keeps him
+// readable at night instead of a black silhouette.
+import * as THREE from 'three';
+import { CONFIG, OUTFITS } from './config.js';
 
 export class Player {
-  constructor(scene, rng) {
+  constructor(scene) {
     this.scene = scene;
-    this.rng = rng;
     this.group = new THREE.Group();
-    this.group.position.set(8, 0, 8);
-    this.heading = Math.PI * 0.75;
+    this.group.name = 'kai';
+    this.yaw = Math.PI * 0.75;
+    this.pitch = 0;
+    this.pos = new THREE.Vector3(0, 0, 14);
     this.vel = new THREE.Vector3();
-    this.vy = 0;
     this.onGround = true;
     this.health = 100;
     this.armor = 0;
-    this.cash = 100;
+    this.money = 500;
     this.outfit = 0;
-    this.weapon = 'smg';
-    this.ammo = { pistol: 48, smg: 96, shotgun: 18 };
+    this.weaponIndex = 1; // SMG
+    this.ammo = { pistol: 48, smg: 128, shotgun: 24 };
     this.mag = { pistol: 12, smg: 32, shotgun: 6 };
-    this.aiming = false;
-    this.recoil = 0;
-    this.walkPhase = 0;
-    this.moveSpeed = 0;
+    this.reloading = false;
+    this.fireCooldown = 0;
     this.inVehicle = null;
-    this.entering = null;   // {vehicle, t, from:Vector3, doorPos:Vector3}
-    this.exiting = null;
-    this.dead = false;
-    this._buildMesh();
+    this.walkPhase = 0;
+    this.moving = false;
+    this.aiming = false;
+
+    this.buildMesh();
     scene.add(this.group);
+
+    // Fill light: a soft light that follows Kai so he never reads as a
+    // black silhouette against the night city.
+    this.fill = new THREE.PointLight(0xbfd4ff, 22, 14, 1.6);
+    this.fill.position.set(0, 3, 0);
+    this.group.add(this.fill);
   }
 
-  _buildMesh() {
-    const o = OUTFITS[this.outfit];
-    const skin = SKINS[Math.floor(this.rng() * SKINS.length)];
-    const hairC = HAIRS[Math.floor(this.rng() * HAIRS.length)];
-    const jacketMat = new THREE.MeshStandardMaterial({ color: o.jacket, roughness: 0.75 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: o.pants, roughness: 0.85 });
-    const shirtMat = new THREE.MeshStandardMaterial({ color: o.shirt, roughness: 0.8 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.6 });
-    const shoeMat = new THREE.MeshStandardMaterial({ color: o.shoes, roughness: 0.5 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: hairC, roughness: 0.9 });
-    this.mats = { jacketMat, pantsMat, shirtMat, skinMat, shoeMat, hairMat };
+  buildMesh() {
+    const outfit = OUTFITS[this.outfit];
+    const skin = new THREE.MeshStandardMaterial({ color: 0xc98d64, roughness: 0.7 });
+    const jacket = new THREE.MeshStandardMaterial({ color: outfit.jacket, roughness: 0.75 });
+    const pants = new THREE.MeshStandardMaterial({ color: outfit.pants, roughness: 0.85 });
+    const shoe = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.6 });
+    const capMat = new THREE.MeshStandardMaterial({ color: outfit.cap, roughness: 0.8 });
+    // Keep the three outfit materials so changeOutfit can recolour them.
+    this.jacketMat = jacket;
+    this.pantsMat = pants;
+    this.capMat = capMat;
+    const chrome = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, roughness: 0.15, metalness: 1.0 });
 
-    // legs pivot at the hip (geometry translated down from the joint)
-    const legGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.85, 8);
-    legGeo.translate(0, -0.425, 0);
-    this.legL = new THREE.Mesh(legGeo, pantsMat);
-    this.legL.position.set(-0.14, 0.86, 0);
-    this.legR = new THREE.Mesh(legGeo, pantsMat);
-    this.legR.position.set(0.14, 0.86, 0);
-    // shoes
-    const shoeGeo = new THREE.BoxGeometry(0.16, 0.09, 0.3);
-    shoeGeo.translate(0, -0.85, 0.05);
-    this.legL.add(new THREE.Mesh(shoeGeo, shoeMat));
-    this.legR.add(new THREE.Mesh(shoeGeo, shoeMat));
-    this.legL.castShadow = this.legR.castShadow = true;
+    // Legs: separate pivots at the hip so they swing.
+    this.legL = new THREE.Group();
+    this.legR = new THREE.Group();
+    for (const [leg, side] of [[this.legL, -1], [this.legR, 1]]) {
+      const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.22), pants);
+      thigh.position.y = -0.25;
+      leg.add(thigh);
+      const shin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.42, 0.2), pants);
+      shin.position.y = -0.68;
+      leg.add(shin);
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.34), shoe);
+      foot.position.set(0, -0.92, 0.06);
+      leg.add(foot);
+      leg.position.set(side * 0.14, 0.95, 0);
+      this.group.add(leg);
+    }
 
-    // torso (jacket) + shirt panel on the chest
-    const torsoGeo = new THREE.CylinderGeometry(0.24, 0.3, 0.75, 10);
-    this.torso = new THREE.Mesh(torsoGeo, jacketMat);
-    this.torso.position.y = 1.22;
-    this.torso.castShadow = true;
-    const shirt = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.55, 0.06), shirtMat);
-    shirt.position.set(0, 1.24, 0.24);
-    this.torso.add(shirt);
+    // Torso: jacket with a bright chest stripe.
+    this.torso = new THREE.Group();
+    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.62, 0.3), jacket);
+    chest.position.y = 0.32;
+    chest.castShadow = true;
+    this.torso.add(chest);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.1, 0.32), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, emissive: 0x222222 }));
+    stripe.position.y = 0.45;
+    this.torso.add(stripe);
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.26), new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.8 }));
+    collar.position.y = 0.66;
+    this.torso.add(collar);
+    this.torso.position.y = 0.95;
+    this.group.add(this.torso);
 
-    // arms pivot at the shoulder
-    const armGeo = new THREE.CylinderGeometry(0.075, 0.085, 0.68, 8);
-    armGeo.translate(0, -0.34, 0);
-    this.armL = new THREE.Mesh(armGeo, jacketMat);
-    this.armL.position.set(-0.36, 1.55, 0);
-    this.armR = new THREE.Mesh(armGeo, jacketMat);
-    this.armR.position.set(0.36, 1.55, 0);
-    const handGeo = new THREE.SphereGeometry(0.09, 8, 6);
-    this.armL.add(new THREE.Mesh(handGeo, skinMat));
-    this.armL.children[0].position.set(0, -0.68, 0);
-    this.armR.add(new THREE.Mesh(handGeo, skinMat));
-    this.armR.children[0].position.set(0, -0.68, 0);
-    this.armL.castShadow = this.armR.castShadow = true;
+    // Arms: separate shoulder pivots.
+    this.armL = new THREE.Group();
+    this.armR = new THREE.Group();
+    for (const [arm, side] of [[this.armL, -1], [this.armR, 1]]) {
+      const upper = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.42, 0.18), jacket);
+      upper.position.y = -0.21;
+      arm.add(upper);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), skin);
+      hand.position.y = -0.48;
+      arm.add(hand);
+      arm.position.set(side * 0.34, 0.58, 0);
+      this.torso.add(arm);
+    }
 
-    // head + hair
-    this.head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 10), skinMat);
-    this.head.position.y = 1.84;
-    this.head.castShadow = true;
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
-    hair.position.y = 0.04;
+    // Head: skin sphere, hair cap, backwards neon cap.
+    this.head = new THREE.Group();
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.21, 14, 12), skin);
+    skull.position.y = 0.12;
+    skull.castShadow = true;
+    this.head.add(skull);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.215, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: 0.9 }));
+    hair.position.y = 0.14;
     this.head.add(hair);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.09, 12), capMat);
+    cap.position.y = 0.3;
+    this.head.add(cap);
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.2), capMat);
+    brim.position.set(0, 0.28, -0.24);
+    this.head.add(brim);
+    this.head.position.y = 0.78;
+    this.torso.add(this.head);
 
-    // chrome SMG in the right hand — bright steel so it reads against the jacket
+    // Chrome SMG in the right hand: body, barrel, magazine, stock.
     this.smg = new THREE.Group();
-    this.smg.scale.setScalar(1.3); // slightly oversized so the chrome reads
-    const chrome = new THREE.MeshStandardMaterial({ color: 0xd7dbe2, roughness: 0.22, metalness: 0.95 });
-    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.4, metalness: 0.8 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.13, 0.5), chrome);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 8), darkMetal);
+    const smgBody = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.5), chrome);
+    this.smg.add(smgBody);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 8), chrome);
     barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.02, 0.36);
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.1), darkMetal);
-    mag.position.set(0, -0.16, 0.05);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.09), darkMetal);
-    grip.position.set(0, -0.12, -0.16);
-    grip.rotation.x = 0.3;
-    this.smg.add(body, barrel, mag, grip);
-    this.smg.position.set(0, -0.72, 0.08);
-    this.smg.rotation.x = Math.PI / 2 - 0.15; // barrel forward when the arm points ahead
+    barrel.position.set(0, 0.02, 0.38);
+    this.smg.add(barrel);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.1), chrome);
+    mag.position.set(0, -0.16, 0.08);
+    this.smg.add(mag);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.18), chrome);
+    stock.position.set(0, 0, -0.3);
+    this.smg.add(stock);
+    this.smg.position.set(0, -0.5, 0.16);
     this.armR.add(this.smg);
 
-    this.group.add(this.legL, this.legR, this.torso, this.armL, this.armR, this.head);
-    this.group.rotation.y = this.heading;
+    this.group.position.copy(this.pos);
   }
 
-  setOutfit(i) {
-    this.outfit = ((i % OUTFITS.length) + OUTFITS.length) % OUTFITS.length;
-    const o = OUTFITS[this.outfit];
-    this.mats.jacketMat.color.setHex(o.jacket);
-    this.mats.pantsMat.color.setHex(o.pants);
-    this.mats.shirtMat.color.setHex(o.shirt);
-    this.mats.shoeMat.color.setHex(o.shoes);
+  changeOutfit(index) {
+    this.outfit = index;
+    const outfit = OUTFITS[index];
+    this.jacketMat.color.setHex(outfit.jacket);
+    this.pantsMat.color.setHex(outfit.pants);
+    this.capMat.color.setHex(outfit.cap);
   }
 
-  get pos() { return this.group.position; }
-
-  takeDamage(amount) {
-    if (this.dead) return false;
-    let rest = amount;
-    if (this.armor > 0) {
-      const absorbed = Math.min(this.armor, rest * 0.6);
-      this.armor -= absorbed;
-      rest -= absorbed;
+  // Called every frame while on foot: movement, gravity, walk cycle.
+  updateOnFoot(dt, input, colliders, groundY = 0) {
+    const sprint = input.sprint ? CONFIG.sprintSpeed : CONFIG.walkSpeed;
+    const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    const move = new THREE.Vector3();
+    if (input.forward) move.add(fwd);
+    if (input.back) move.sub(fwd);
+    if (input.right) move.add(right);
+    if (input.left) move.sub(right);
+    this.moving = move.lengthSq() > 0;
+    if (this.moving) {
+      move.normalize().multiplyScalar(sprint);
+      this.vel.x = move.x;
+      this.vel.z = move.z;
+      this.walkPhase += dt * (input.sprint ? 13 : 9);
+    } else {
+      this.vel.x *= Math.max(0, 1 - dt * 10);
+      this.vel.z *= Math.max(0, 1 - dt * 10);
     }
-    this.health -= rest;
-    if (this.health <= 0) {
-      this.health = 0;
-      this.dead = true;
-      return true;
-    }
-    return false;
-  }
-
-  heal(amount) { this.health = clamp(this.health + amount, 0, 100); }
-
-  // Begin the scripted car entry: walk to the door, door swings, sit down.
-  startEnter(vehicle, doorPos) {
-    this.entering = { vehicle, t: 0, from: this.pos.clone(), doorPos: doorPos.clone() };
-  }
-
-  startExit(exitPos) {
-    this.exiting = { t: 0, to: exitPos.clone() };
-    this.inVehicle = null;
-    this.group.visible = true;
-  }
-
-  // Per-frame pose. mode: 'idle' | 'walk' | 'run' | 'air' | 'aim' | 'enter'
-  _pose(dt, mode, speed01) {
-    const u = this;
-    // on foot the weapon is in hand again (ridePose hides it on a bike)
-    u.smg.visible = true;
-    // ease the recoil back to zero
-    u.recoil = Math.max(0, u.recoil - dt * 6);
-    const breathe = Math.sin(performance.now() * 0.0016) * 0.02;
-    if (mode === 'idle') {
-      u.walkPhase += dt * 1.2;
-      const s = Math.sin(u.walkPhase) * 0.04;
-      u.legL.rotation.x = s; u.legR.rotation.x = -s;
-      u.armL.rotation.x = -s * 1.2; u.armR.rotation.x = s * 1.2;
-      u.torso.position.y = 1.22 + breathe;
-      u.torso.rotation.x = 0;
-      u.head.rotation.x = 0;
-    } else if (mode === 'walk' || mode === 'run') {
-      const freq = mode === 'run' ? 11 : 7.5;
-      const amp = mode === 'run' ? 0.85 : 0.55;
-      u.walkPhase += dt * freq * (0.6 + speed01 * 0.6);
-      const s = Math.sin(u.walkPhase);
-      u.legL.rotation.x = s * amp;
-      u.legR.rotation.x = -s * amp;
-      u.armL.rotation.x = -s * (mode === 'run' ? 0.75 : 0.45);
-      u.armR.rotation.x = s * (mode === 'run' ? 0.75 : 0.45);
-      u.torso.rotation.x = mode === 'run' ? 0.16 : 0.05;
-      u.torso.position.y = 1.22 + Math.abs(Math.cos(u.walkPhase)) * 0.045;
-      u.head.rotation.x = mode === 'run' ? -0.08 : 0;
-    } else if (mode === 'air') {
-      // jump: front leg tucked up, back leg trailing, arms out for balance
-      u.legL.rotation.x = -0.95;
-      u.legR.rotation.x = 0.55;
-      u.armL.rotation.x = -0.9; u.armL.rotation.z = 0.35;
-      u.armR.rotation.x = -0.9; u.armR.rotation.z = -0.35;
-      u.torso.rotation.x = 0.08;
-    }
-    if (mode === 'aim' || u.aiming) {
-      // two-handed aim: both arms forward, SMG level, slight crouch
-      u.armR.rotation.x = -1.42 - u.recoil * 0.35;
-      u.armR.rotation.z = -0.08;
-      u.armL.rotation.x = -1.3;
-      u.armL.rotation.z = 0.35;
-      u.torso.rotation.x = 0.06;
-      u.head.rotation.x = -0.04;
-    } else if (mode !== 'air') {
-      u.armL.rotation.z = 0;
-      u.armR.rotation.z = 0;
-    }
-  }
-
-  update(dt, move, wantJump, world) {
-    // move: {x, z} camera-relative, already normalized; wantJump edge
-    if (this.entering) {
-      const e = this.entering;
-      e.t += dt;
-      const v = e.vehicle;
-      if (e.t < 0.55) {
-        // walk to the door
-        const k = clamp(e.t / 0.55, 0, 1);
-        this.pos.lerpVectors(e.from, e.doorPos, k);
-        this.heading = angleLerp(this.heading, Math.atan2(e.doorPos.x - e.from.x, e.doorPos.z - e.from.z) || this.heading, dt * 8);
-        this.group.rotation.y = this.heading;
-        this._pose(dt, 'walk', 0.6);
-        v.setDoorOpen(clamp(e.t / 0.55, 0, 1) * 0.9);
-      } else if (e.t < 1.05) {
-        // step in and sit: sink into the seat, door swings shut
-        const k = clamp((e.t - 0.55) / 0.5, 0, 1);
-        this.pos.lerpVectors(e.doorPos, v.seatPos(), k);
-        this.group.rotation.y = angleLerp(this.group.rotation.y, v.group.rotation.y, dt * 8);
-        v.setDoorOpen(0.9 * (1 - k));
-        this._pose(dt, 'idle', 0);
-      } else {
-        this.entering = null;
-        this.inVehicle = v;
-        this.group.visible = false;
-        v.setDoorOpen(0);
-      }
-      return;
-    }
-    if (this.exiting) {
-      const e = this.exiting;
-      e.t += dt;
-      const k = clamp(e.t / 0.45, 0, 1);
-      this.pos.lerpVectors(this.pos.clone(), e.to, k);
-      if (e.t >= 0.45) this.exiting = null;
-      this._pose(dt, 'walk', 0.5);
-      return;
-    }
-    if (this.dead) return;
-
-    const speed = this.aiming ? PLAYER.walkSpeed * 0.55 : PLAYER.walkSpeed;
-    const maxSpeed = this._sprinting ? PLAYER.sprintSpeed : (Math.hypot(move.x, move.z) > 0.1 ? speed : 0);
-    const target = new THREE.Vector3(move.x, 0, move.z).multiplyScalar(maxSpeed);
-    // smooth accel / decel — never stops dead
-    const rate = (move.x || move.z) ? PLAYER.accel : PLAYER.decel;
-    this.vel.x += clamp(target.x - this.vel.x, -rate * dt, rate * dt);
-    this.vel.z += clamp(target.z - this.vel.z, -rate * dt, rate * dt);
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
-
-    // gravity + jump
-    if (wantJump && this.onGround) {
-      this.vy = PLAYER.jumpSpeed;
+    if (input.jump && this.onGround) {
+      this.vel.y = CONFIG.jumpSpeed;
       this.onGround = false;
     }
-    this.vy -= WORLD.gravity * dt;
-    this.pos.y += this.vy * dt;
-    if (this.pos.y <= 0) { this.pos.y = 0; this.vy = 0; this.onGround = true; }
-
-    // collide with buildings (circle push-out)
-    const c = world.collide(this.pos.x, this.pos.z, PLAYER.radius);
-    this.pos.x = c.x; this.pos.z = c.z;
-    // stay inside the map
-    this.pos.x = clamp(this.pos.x, -316, 316);
-    this.pos.z = clamp(this.pos.z, -316, 316);
-
-    // face the travel direction, smoothly
-    const spd = Math.hypot(this.vel.x, this.vel.z);
-    this.moveSpeed = spd;
-    if (spd > 0.6) {
-      const want = Math.atan2(this.vel.x, this.vel.z);
-      this.heading = angleLerp(this.heading, want, dt * PLAYER.turnRate);
+    this.vel.y -= CONFIG.gravity * dt;
+    this.pos.x += this.vel.x * dt;
+    this.pos.z += this.vel.z * dt;
+    this.pos.y += this.vel.y * dt;
+    if (this.pos.y <= groundY) {
+      this.pos.y = groundY;
+      this.vel.y = 0;
+      this.onGround = true;
     }
-    if (this.aiming) this.heading = this._aimHeading ?? this.heading;
-    this.group.rotation.y = this.heading;
-
-    const speed01 = clamp(spd / PLAYER.runSpeed, 0, 1);
-    const mode = !this.onGround ? 'air' : this.aiming ? 'aim' : spd > 7 ? 'run' : spd > 0.6 ? 'walk' : 'idle';
-    this._pose(dt, mode, speed01);
+    // Keep inside the city + beach, out of the deep ocean.
+    this.pos.x = Math.max(-272, Math.min(258, this.pos.x));
+    this.pos.z = Math.max(-272, Math.min(272, this.pos.z));
+    this.resolveCollisions(colliders);
+    this.group.position.copy(this.pos);
+    this.group.rotation.y = this.yaw;
+    this.animate(dt);
+    if (this.fireCooldown > 0) this.fireCooldown -= dt * 1000;
   }
 
-  // Sitting pose on a motorcycle: legs bent to the pegs, both hands on the bars.
-  ridePose(dt) {
-    this.smg.visible = false; // the gun is holstered while riding
-    this.legL.rotation.x = -1.15;
-    this.legR.rotation.x = -1.05;
-    this.armL.rotation.x = -1.05;
-    this.armL.rotation.z = 0.22;
-    this.armR.rotation.x = -1.05;
-    this.armR.rotation.z = -0.22;
-    this.torso.rotation.x = 0.22;
-    this.torso.position.y = 1.2;
+  resolveCollisions(colliders) {
+    const r = CONFIG.playerRadius;
+    for (const c of colliders) {
+      if (this.pos.x > c.minX - r && this.pos.x < c.maxX + r && this.pos.z > c.minZ - r && this.pos.z < c.maxZ + r) {
+        const dxl = this.pos.x - (c.minX - r), dxr = (c.maxX + r) - this.pos.x;
+        const dzl = this.pos.z - (c.minZ - r), dzr = (c.maxZ + r) - this.pos.z;
+        const m = Math.min(dxl, dxr, dzl, dzr);
+        if (m === dxl) this.pos.x = c.minX - r;
+        else if (m === dxr) this.pos.x = c.maxX + r;
+        else if (m === dzl) this.pos.z = c.minZ - r;
+        else this.pos.z = c.maxZ + r;
+      }
+    }
   }
 
-  // Muzzle world position + forward direction for shooting.
-  muzzle() {
-    const p = new THREE.Vector3();
-    this.smg.getWorldPosition(p);
-    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.group.quaternion);
-    dir.y = this._aimPitch ?? 0;
-    dir.normalize();
-    return { origin: p, dir };
+  animate(dt) {
+    const swing = this.moving ? Math.sin(this.walkPhase) * 0.55 : 0;
+    const breathe = Math.sin(performance.now() * 0.002) * 0.02;
+    this.legL.rotation.x = swing;
+    this.legR.rotation.x = -swing;
+    // Arms counter-swing; right arm holds the SMG forward when aiming.
+    if (this.aiming) {
+      this.armR.rotation.x = -Math.PI / 2 + 0.15;
+      this.armL.rotation.x = -Math.PI / 2 + 0.3;
+      this.torso.rotation.x = 0.08;
+    } else {
+      this.armL.rotation.x = -swing * 0.8;
+      this.armR.rotation.x = swing * 0.8;
+      this.torso.rotation.x = breathe;
+    }
+    // Idle breathing + slight head bob while running.
+    this.torso.position.y = 0.95 + Math.abs(Math.sin(this.walkPhase)) * (this.moving ? 0.05 : 0) + breathe * 0.5;
+    this.head.rotation.x = this.pitch * 0.4;
+    // Recoil kick after firing.
+    if (this.recoilT > 0) {
+      this.recoilT -= dt;
+      this.armR.rotation.x -= 0.25 * (this.recoilT / 0.12);
+      this.torso.rotation.x -= 0.06 * (this.recoilT / 0.12);
+    }
   }
 
-  get weaponDef() { return WEAPONS[this.weapon]; }
+  recoil() {
+    this.recoilT = 0.12;
+  }
+
+  currentWeapon() {
+    return ['pistol', 'smg', 'shotgun'][this.weaponIndex];
+  }
+
+  // Aim direction from the camera yaw/pitch.
+  aimDir() {
+    return new THREE.Vector3(
+      -Math.sin(this.yaw) * Math.cos(this.pitch),
+      Math.sin(this.pitch),
+      -Math.cos(this.yaw) * Math.cos(this.pitch),
+    );
+  }
 }

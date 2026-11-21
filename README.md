@@ -1,75 +1,75 @@
-# Neon Bay — Make GTA 6
+# Neon Bay — Make GTA 6 (Round 11)
 
 [![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![rank](https://make.fun/badge/gta6-01/Iyannn11/neon-bay/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/Iyannn11/neon-bay/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
 An original open-world crime game in the spirit of GTA 6, built for the
-[make.fun GTA 6 bounty](https://make.fun/bounty/gta6-01). You are **Kai Reyes**
-in **Neon Bay**, a coastal city of neon towers, a beach, a marina and a highway
-ring — on foot, by car and by motorcycle.
+[make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01).
 
-## Play it
+**Neon Bay** is a sun-soaked coastal city. You are **Kai Reyes**, a driver
+fresh out of the marina scene, working your way up from taxi fares and neon
+crates to the **King of the Bay** finale. Explore on foot or by car, steal
+sports cars and motorcycles, dodge (or outrun) the Neon Bay police, and build
+your fortune.
+
+## What is in the game
+
+- **A living coastal city** — stepped towers, round glass spires, neon
+  signs, a central plaza, a marina, a beach strip and a highway ring, all
+  under a gradient sky with sun, clouds, stars and a golden hour.
+- **On foot** — smooth third-person walk / run / jump with real character
+  animation, pointer-lock mouse-look, aim zoom, and three weapons
+  (pistol, SMG, shotgun) with pickups.
+- **Vehicles** — sports cars, sedans, taxis and police cruisers, plus two
+  motorcycles (Vortex R1 and Bay Cruiser) that lean into turns. Steal any
+  of them with **E**.
+- **Police** — a 0–5 wanted level, pursuing cruisers, roadblocks and a
+  helicopter with a searchlight. Lay low and the heat fades.
+- **Missions** — a 6-mission chain ending in the **King of the Bay**
+  finale at the marina ($10,000).
+- **Money and shops** — earn from fares, crates, photo spots, stunts and
+  races; spend it at AMMU-NATION, PAY N SPRAY and the THREADS wardrobe
+  (4 outfits).
+- **People** — pedestrians and drivers you can talk to, with named
+  dialogue, tips and hints.
+- **Weather and settings** — rain or shine (V key), volume, mouse
+  sensitivity, graphics quality, and a working save (localStorage).
+- **Sound** — fully synthesized WebAudio: engine, gunshots, sirens,
+  pickups and UI.
+
+## How to play
 
 Serve `game/` with any static server and open `game/index.html` in desktop
-Chrome. No network requests, no build step — Three.js is vendored under
-`game/vendor/`.
+Chrome. No network is needed — every asset is a file under `game/`.
 
-```
-python3 -m http.server 8080 --directory game
-# open http://localhost:8080
-```
+- **WASD** move · **Shift** sprint · **Space** jump · **Mouse** look
+  (click to lock) · **LMB** shoot · **RMB** aim · **R** reload
+- **E** enter / exit vehicle · **F** taxi job · **V** toggle weather
+- **1 / 2 / 3** weapons · **Esc** pause / settings · **M** minimap zoom
 
-## What's in the city
+Touch controls (joystick + action buttons) appear automatically on phones
+and tablets.
 
-- **A living character, not a stiff doll** — walk and run cycles, idle
-  breathing, jump tuck, two-handed aim with recoil, and a scripted car-entry
-  animation (walk to the door, door swings open, sit down). Pointer-lock
-  mouse-look, crosshair, right-click aim zoom, smooth acceleration and turning.
-- **Vehicles** — sports car, sedans, a taxi, and two motorcycles (sport bike +
-  cruiser) that lean into turns. Steal any of them with **E**; wrecks barely
-  move until PAY N SPRAY fixes them for $100.
-- **Six chained missions** — First Wheels, Taxi Driver, Neon Run (street
-  race), Crate Hunter, Heat (lose a 3-star wanted level), and the $10,000
-  finale **King of the Bay** at the marina.
-- **Money that spends** — earn from missions, taxi fares, 10 neon crates,
-  5 stunt jumps, 3 street races and 3 photo spots; spend it at AMMU-NATION
-  (health / armor / ammo), at PAY N SPRAY, or on 4 outfits at THREADS.
-- **People to talk to** — 8 named NPCs with their own lines; some hand you a
-  tip or a mission hint. Pedestrians flee when shots ring out.
-- **The law** — wanted level 0–5, chasing cop cars, roadblocks at 3 stars,
-  and a helicopter with a sweeping searchlight at 4.
-- **Weather and time** — full day/night cycle with a golden-hour sunset, rain
-  you can toggle with **V** (wet shining roads, darker sky), and a Settings
-  menu (volume, mouse sensitivity, graphics quality, weather, reset save).
-- **HUD + minimap**, start / pause / game-over screens, localStorage saves,
-  synthesized WebAudio sound (no audio files), and touch controls.
+## Structure
 
-## Controls
+- `game/index.html` — page, import map, HUD shell
+- `game/src/main.js` — boot, game loop, states, save, shot staging
+- `game/src/world.js` — the city: buildings, streets, beach, marina, props
+- `game/src/sky.js` — gradient sky dome, sun, moon, stars, clouds
+- `game/src/textures.js` — procedural canvas textures (ground, glow, signs)
+- `game/src/player.js` — Kai: movement, animation, weapons
+- `game/src/vehicles.js` — cars, motorcycles, traffic AI
+- `game/src/pedestrians.js` — NPCs and dialogue
+- `game/src/police.js` — wanted level, pursuit, helicopter, roadblocks
+- `game/src/missions.js` — the 6-mission chain
+- `game/src/weather.js` — rain and sunshine
+- `game/src/hud.js` — HUD, minimap, menus, shops, dialogs
+- `game/src/audio.js` — synthesized sound effects
+- `game/src/input.js` — keyboard, mouse, pointer lock, touch
+- `game/src/config.js` — tuning constants · `game/src/random.js` — seeded RNG
+- `main.ts` — hands the game in (copies `game/` + `screenshots/`, writes
+  `dossier.json`)
 
-| Key | Action |
-| --- | --- |
-| WASD / arrows | Move / drive |
-| Mouse (click to lock) | Look around |
-| Left click | Shoot |
-| Right click | Aim (zoom) |
-| E | Enter car, talk, shop, change outfit |
-| Space | Jump |
-| Shift | Sprint |
-| 1 / 2 / 3 | Pistol / SMG / Shotgun |
-| R | Reload |
-| F | Take photo at a photo spot |
-| T | Start a taxi job (in the taxi) |
-| V | Toggle rain |
-| P | Pause & settings |
-
-## Files
-
-- `main.ts` — entry program: copies `game/` + `screenshots/` to `/output`
-  and writes `dossier.json` with the kit's `buildDossier`.
-- `game/` — the playable game (`index.html` + `src/*.js`, Three.js vendored).
-- `screenshots/` — 4 real renders of the game.
-- `vendor/makefun-game.ts` — the kit's dossier library, unchanged.
-
-MIT licensed. All city, characters, vehicles, names, story, art and sound are
-original — nothing from Rockstar Games.
+Built from scratch for the make.fun gta6-01 competition. All art, names,
+characters and story are original.
