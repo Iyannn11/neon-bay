@@ -2,78 +2,65 @@
 [![rank](https://make.fun/badge/gta6-01/Iyannn11/neon-bay/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/Iyannn11/neon-bay/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-# Neon Bay — Make GTA 6 bounty entry
+# Neon Bay — an open-world crime game
 
-An open-world crime game in the spirit of GTA 6, built from scratch in
-Three.js. You are Kai Reyes, a driver-for-hire in Neon Bay, a coastal city
-that never sleeps. Six jobs stand between you and the crown of the city.
+An original coastal open-world game in the spirit of GTA 6, built with Three.js.
+You are **Kai Reyes**, a driver fresh out of the Neon Bay docks, climbing from
+small pickups to the biggest heist the city has ever seen. Drive, steal cars,
+outrun the police, and take the crown: **King of the Bay**.
 
-## The story
+Play it in the browser: serve `game/` with any static server
+(`node serve.ts`, then open http://localhost:8080) and drive with the keyboard.
 
-Kai Reyes came to Neon Bay with a fast car and a faster reputation. A fixer
-named Marlowe offers him a chain of jobs: a package at the docks, a stolen
-Comet GT, a courier to tail through downtown, a three-star escape, the Coral
-Bank vault — and the King of the Bay finale. Every job pays. Every job brings
-heat. Finish the chain and Neon Bay is yours.
+## What is in the game
 
-## The six missions
+- **A living city**: Neon Bay — a neon-drenched coastal city with a downtown
+  skyline, a beachfront boulevard, a marina, and back streets. Traffic that
+  changes lanes, brakes at lights, and dodges you. Pedestrians on the sidewalks.
+- **6 story missions + side work**: a full chain from your first pickup to the
+  $10,000 finale "King of the Bay", plus taxi fares and hidden neon crates to
+  collect around the city.
+- **Drive anything**: steal any car on the street (E), each with its own speed
+  and handling. Cars are smooth, curved, and polished — no blocky boxes.
+- **Wanted 0–5 stars**: the Neon Bay police chase, ram, and roadblock you.
+  At 3 stars and up a police helicopter joins the hunt with a searchlight.
+- **Combat**: pistol, SMG, and shotgun with ammo, pickups, and muzzle flash.
+- **A full HUD**: health, money, wanted stars, mission timer, speedometer,
+  weapon and ammo, and a live 2D minimap with mission markers and police.
+- **Day and night**: a full day/night cycle — golden-hour sunsets and a
+  neon-drenched night with glowing signs, headlights, and fog.
+- **Sound**: fully synthesized WebAudio — engine hum, sirens, gunshots, and
+  mission jingles. M mutes.
+- **Save**: progress, money, and best times persist in localStorage.
 
-1. **First Light** ($500) — pick up a package at the docks, deliver it to the hideout.
-2. **The Comet GT** ($1,200) — steal the sports car outside the casino, bring it to the garage in one piece.
-3. **Tail the Courier** ($2,000) — follow the courier through downtown without being spotted.
-4. **Heat Escape** ($3,500) — lose a three-star pursuit and reach the safehouse.
-5. **The Coral Bank Job** ($6,000) — crack the vault (hold E for 8 seconds) and escape with the cash.
-6. **King of the Bay** ($10,000) — the finale: escape four-star heat and stash the cash at the hideout.
+## Controls
 
-## Systems
+| Key | Action |
+| --- | --- |
+| W / A / S / D | Drive / walk |
+| Shift | Boost / sprint |
+| Space | Handbrake |
+| E | Enter / exit car, steal a car |
+| F | Shoot (on foot) / fire from car |
+| 1 / 2 / 3 | Pistol / SMG / Shotgun |
+| R | Reload |
+| C | Change camera |
+| M | Mute sound |
+| P / Esc | Pause |
+| Enter | Start mission / confirm |
 
-- **Driving** — WASD/arrows, Space handbrake, E to enter and steal cars. Acceleration, braking, steering, collisions.
-- **Traffic** — 20 AI cars following the street grid in lanes, stopping for the car ahead; 35 pedestrians on the sidewalks who scatter and can be knocked down.
-- **Wanted 0–5** — stealing, speeding, hitting pedestrians and shooting raise the heat. Police cars chase and ram; at 4+ stars a helicopter with a searchlight joins and roadblocks appear. Get busted on foot at 2+ stars and it is over.
-- **Combat** — punch (F), pistol (mouse click, R reload). Police return fire at high wanted.
-- **HUD** — health, cash, wanted stars, speed, clock, mission panel, a 2D minimap (player, traffic, police, mission marker) and an objective arrow.
-- **Screens** — title, pause (Esc/P), game over (busted/wasted) with restart. Progress saves to localStorage (cash, missions done, best cash).
-- **Sound** — fully synthesised WebAudio: engine hum, police siren, gunshots, pickup chimes and a music loop. M mutes.
+## Screenshots
 
-## The city
+Four real renders of the game running in a browser: the cover (a golden-hour
+chase through downtown), the city on foot, a mission in progress, and the neon
+night.
 
-A coastal city on a street grid: downtown towers (four distinct silhouettes — slab with setback and pyramid roof, smooth cylinder with spire, podium with slim tower, twin towers with a skybridge), lit windows, neon signs (CLUB, VICE, CASINO, NEON, HOTEL), a marina with yachts, a beach and boardwalk, a park, a lighthouse and a highway ring. Day and night lighting with soft shadows, glossy glass and additive glow on every neon sign and lamp. The visuals are smooth and cinematic — curved car bodies extruded from a side profile, cylinder figures, no blocky voxels.
+## Tech
 
-## How to play
+- Three.js r160, vendored under `game/vendor/` — no network requests, the game
+  runs fully offline from its own files.
+- `main.ts` hands the game in: it copies `game/` and `screenshots/` to
+  `/output` and writes `/output/dossier.json` with the kit's `buildDossier`.
+- License: MIT.
 
-Serve the folder and open it in desktop Chrome:
-
-```
-node serve.ts
-# open http://localhost:8080
-```
-
-No network request is made; everything loads from local files. The game is
-deterministic per seed (`?seed=1337`); the four screenshots are staged with
-`?shot=start|chase|mission|night&seed=1337`.
-
-## File layout
-
-- `game/index.html` — canvas, HUD, title/pause/game-over screens, import map.
-- `game/src/main.js` — boot, game loop, camera, player, screens, shot hook.
-- `game/src/config.js` — world constants, palette, tuning, the 6 missions.
-- `game/src/random.js` — seeded mulberry32 RNG.
-- `game/src/city.js` — towers, streets, marina, beach, park, lighthouse, day/night.
-- `game/src/vehicles.js` — curved car bodies, player driving, traffic AI, stealing.
-- `game/src/police.js` — wanted 0–5, pursuit, helicopter, roadblocks, busted.
-- `game/src/pedestrians.js` — walking, scattering, knockdowns.
-- `game/src/combat.js` — punch, pistol, reload, police return fire.
-- `game/src/missions.js` — the six-job chain and its step triggers.
-- `game/src/hud.js` — health, cash, stars, speed, clock, mission panel, minimap.
-- `game/src/input.js` — keyboard, mouse-drag camera, touch controls.
-- `game/src/audio.js` — synthesised WebAudio: engine, siren, shots, music.
-- `game/src/shots.js` — deterministic `?shot=` staging for the screenshots.
-- `game/src/save.js` — localStorage save/load/clear.
-- `main.ts` — the hand-in program: copies game/ and screenshots/, writes dossier.json.
-- `serve.ts` — local static server (port 8080).
-- `shots.json` — the four screenshot definitions.
-- `screenshots/` — the four real renders (cover first).
-
-## License
-
-MIT. See LICENSE.
+Built for the [Make GTA 6 bounty](https://make.fun/bounty/gta6-01) on make.fun.
